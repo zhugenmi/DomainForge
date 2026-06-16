@@ -1,7 +1,87 @@
-.git/
-CLAUDE*
-docs/
-examples/
-*.log
-*.sh
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+*.egg
+*.whl
+*.so
+
+# --- Virtual Environment ---
+.venv/
+venv/
+env/
+virtualenv/
+
+# --- IDE & Editors ---
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# --- OS ---
 .DS_Store
+.DS_Store?
+._*
+Thumbs.db
+Desktop.ini
+ehthumbs.db
+
+# --- Project: Local Data ---
+/data/raw_documents/
+/data/parsed_documents/
+/data/eval_datasets/
+/data/uploads/
+!data/.gitkeep
+
+# --- Environment & Secrets ---
+.env
+.env.local
+.env.production
+*.pem
+*.key
+
+# --- Logs ---
+*.log
+logs/
+
+# --- Database ---
+*.db
+*.sqlite
+*.sqlite3
+
+# --- Frontend (Next.js / Node) ---
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/dist/
+frontend/build/
+frontend/.env.local
+frontend/coverage/
+frontend/.turbo/
+
+# --- Docker ---
+docker-compose.override.yml
+
+# --- Testing ---
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- Observability ---
+otel-collector-data/
+jaeger-data/
+
+data/
+docs/
+CLAUDE*
+design*
