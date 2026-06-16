@@ -93,7 +93,7 @@
 
 - OpenAI GPT 系列
 - Claude
-- Gemini
+- MiniMax
 - DeepSeek
 - Qwen
 
