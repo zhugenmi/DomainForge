@@ -1,0 +1,20 @@
+[
+  {
+    "id": "legal-001",
+    "query": "民法典中合同订立需要什么条件？",
+    "expected_keywords": ["要约", "承诺", "合意"],
+    "expected_answer_keywords": ["要约", "承诺"]
+  },
+  {
+    "id": "legal-002",
+    "query": "什么是无权代理？",
+    "expected_keywords": ["代理权", "被代理人", "追认"],
+    "expected_answer_keywords": ["代理权", "追认"]
+  },
+  {
+    "id": "legal-003",
+    "query": "侵权责任的归责原则有哪些？",
+    "expected_keywords": ["过错", "无过错", "公平"],
+    "expected_answer_keywords": ["过错"]
+  }
+]

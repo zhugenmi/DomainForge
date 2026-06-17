@@ -81,7 +81,13 @@ htmlcov/
 otel-collector-data/
 jaeger-data/
 
-data/
+# --- Project: ignore local data ---
+/data/raw_documents/
+/data/parsed_documents/
+/data/eval_datasets/
+/data/uploads/
 docs/
+alembic/
 CLAUDE*
-design*
+script.txt
+.claude/

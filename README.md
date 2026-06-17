@@ -1,6 +1,6 @@
 # DomainForge — 领域定制智能对话与知识服务平台
 
-面向法律、金融、企业知识库等垂直领域场景构建的企业级 Agent 应用开发平台。平台以**自研 Agent Runtime** 为核心，集成**任务规划（Planning）、记忆管理（Memory）、工具调用（Tool Use）、结果反思（Reflection）**四阶段执行框架，实现多轮对话、知识检索、工具编排、会话记忆与安全审计能力，支持快速构建行业级 AI 助手。
+面向法律、金融、企业知识库等垂直领域场景构建的企业级 Agent 应用开发平台。平台集成**任务规划（Planning）、记忆管理（Memory）、工具调用（Tool Use）、结果反思（Reflection）**四阶段执行框架，实现多轮对话、知识检索、工具编排、会话记忆与安全审计能力，支持快速构建行业级 AI 助手。
 
 ---
 
@@ -106,7 +106,7 @@ User Query → Intent Recognition → Task Planning → Memory Retrieval
 | 模块 | 技术 |
 | ---- | ---- |
 | 后端框架 | FastAPI |
-| Agent Runtime | 自研（State + Node + Router 架构） |
+| Agent Runtime | State + Node + Router 架构 |
 | 数据库 | PostgreSQL + pgvector |
 | 缓存 | Redis |
 | ORM | SQLAlchemy |
@@ -244,43 +244,186 @@ domainforge/
 
 ---
 
-## 实现路径
-
-平台分四个阶段渐进构建：
-
-### 第一阶段：打通主链路
-FastAPI 接口、单模型调用、基础对话状态、SSE 流式输出、简单工具调用、基础知识库检索。
-
-### 第二阶段：完善 Agent 编排
-Agent Runtime 状态机、Planning 节点、Reflection 节点、条件分支与失败重试、模型路由与降级。
-
-### 第三阶段：增强检索
-文档解析器、领域分块策略、BM25 + 向量双路召回、RRF 融合、CrossEncoder Rerank。
-
-### 第四阶段：安全与观测
-RBAC 权限控制、工具白名单、敏感操作拦截、OpenTelemetry Tracing、Evals 评测闭环。
-
----
-
 ## 快速开始
 
-> 文档待完善
+### 环境要求
+
+- Python 3.11+
+- Docker & Docker Compose
+- LLM API Key（OpenAI / DeepSeek / GLM / Qwen 等 OpenAI-compatible 服务）
+
+### 1. 启动基础设施
+
+```bash
+docker-compose up -d
+```
+
+启动 PostgreSQL（pgvector）+ Redis。默认配置：
+
+| 服务 | 端口 | 账号 |
+|------|------|------|
+| PostgreSQL | 5432 | domainforge / domainforge |
+| Redis | 6379 | 无密码 |
+
+### 2. 配置环境变量
+
+```bash
+cp .env.example .env
+```
+
+编辑 `.env`，必填项：
+
+```env
+# LLM — 对话模型（支持所有 OpenAI-compatible API）
+LLM_API_KEY=sk-xxx                  # 必填
+LLM_BASE_URL=https://api.openai.com/v1  # 按需改为 DeepSeek/GLM/Qwen 的端点
+DEFAULT_LLM_MODEL=gpt-4o            # 按需改为对应模型名
+
+# Embedding — 向量模型（可与对话模型使用不同服务）
+EMBEDDING_API_KEY=sk-xxx            # 默认复用 LLM_API_KEY
+EMBEDDING_BASE_URL=https://api.openai.com/v1
+EMBEDDING_MODEL=text-embedding-3-small
+```
+
+可选配置项见 `.env.example`。
+
+### 3. 安装依赖 & 数据库迁移
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+make install        # 安装 Python 依赖
+make migrate        # 执行数据库迁移（Alembic）
+```
+
+### 4. 启动服务
+
+```bash
+make dev
+```
+
+服务启动在 `http://localhost:8000`，API 前缀 `/api/v1`。
+
+### 5. 验证
+
+```bash
+# 健康检查
+curl http://localhost:8000/api/v1/health
+
+# 发起对话
+curl -X POST http://localhost:8000/api/v1/chat \
+  -H "Content-Type: application/json" \
+  -d '{"query": "你好"}'
+
+# SSE 流式对话
+curl -N http://localhost:8000/api/v1/chat/stream?query=你好
+```
+
+### 6. 启动前端（可选）
+
+```bash
+make frontend-install    # 安装前端依赖
+make frontend-dev        # 启动前端开发服务器（端口 3000）
+```
+
+前端页面地址：`http://localhost:3000`，开发模式下自动代理 API 请求到后端 8000 端口。
+
+### 常用命令
+
+| 命令 | 说明 |
+|------|------|
+| `make install` | 安装依赖（含 dev 依赖） |
+| `make dev` | 启动开发服务器（热重载） |
+| `make migrate` | 执行数据库迁移 |
+| `make makemigration msg="描述"` | 生成迁移脚本 |
+| `make test` | 运行测试 |
+| `make lint` | 代码检查（ruff + mypy） |
+| `make docker-up` | 启动 Docker 基础设施 |
+| `make docker-down` | 停止 Docker 基础设施 |
+| `make frontend-install` | 安装前端依赖 |
+| `make frontend-dev` | 启动前端开发服务器 |
+| `make frontend-build` | 构建前端生产版本 |
 
 ---
 
 ## 使用
 
-> 文档待完善
+详细 API 文档见 [docs/api_reference.md](docs/api_reference.md)。
+
+### 基础对话
+
+```bash
+# 创建新会话
+curl -X POST http://localhost:8000/api/v1/chat \
+  -H "Content-Type: application/json" \
+  -d '{"query": "什么是民法典？"}'
+
+# 返回示例
+# {"session_id": "uuid", "answer": "...", "intent": "knowledge"}
+```
+
+### 流式对话
+
+```bash
+curl -N http://localhost:8000/api/v1/chat/stream?query=你好
+
+# SSE 事件流示例：
+# data: {"event": "intent_detected", "data": {"intent": "chat"}}
+# data: {"event": "final_answer", "data": {"answer": "你好！有什么可以帮助你的？"}}
+```
+
+### 续接已有会话
+
+```bash
+curl -X POST http://localhost:8000/api/v1/chat \
+  -H "Content-Type: application/json" \
+  -d '{"query": "能否详细说明？", "session_id": "上一步返回的 session_id"}'
+```
+
+### 知识库操作
+
+```bash
+# 导入文档到知识库
+curl -X POST http://localhost:8000/api/v1/knowledge/index \
+  -H "Content-Type: application/json" \
+  -d '{"domain": "legal", "title": "民法典总则", "content": "文档内容..."}'
+
+# 检索知识库
+curl "http://localhost:8000/api/v1/knowledge/search?query=合同效力&top_k=5"
+```
+
+---
+
+## 前端
+
+前端基于 Next.js 16 + Tailwind CSS v4，提供浅色专业风格的可视化交互界面。
+
+### 页面
+
+| 页面 | 路径 | 说明 |
+|------|------|------|
+| 对话 | `/` | SSE 流式对话，意图/规划/检索/工具/反思中间状态实时展示 |
+| 知识库 | `/knowledge` | 文档导入 + 知识库检索测试（hybrid/vector/bm25 三种模式） |
+| 技能 | `/skills` | 已注册工具一览（含参数、权限、超时） |
+| 审计 | `/audit` | 最近审计日志查询 |
+| 评测 | `/evals` | 评测集运行 + 历史结果 |
+
+### 设计
+
+- **配色**：浅色（背景 `#F7F8FA` / 卡片 `#FFFFFF`）+ 单一主蓝 `#2563EB` + 状态色（成功/警告/危险）
+- **字体**：系统 sans 优先（PingFang SC / 微软雅黑）
+- **圆角**：卡片 12px、按钮 8px
+- **侧栏**：可折叠，包含品牌区 + 开启新会话 + 会话历史 + 模块导航 + 健康状态
+
+### 技术实现
+
+- API 请求封装在 `src/lib/api.ts`，覆盖 chat/SSE/sessions/audit/evals/admin 等接口
+- 后端 CORS 已对前端 dev origin 放行
+- 组件全为客户端组件（`"use client"`），对话页通过 `async generator` 逐步消费 SSE 事件流
 
 ---
 
 ## 贡献
-
-### 分支策略
-
-- `main` — 稳定版本，仅接受 PR 合并
-- `feat/*` — 特性开发分支
-- `fix/*` — 修复分支
 
 ### 开发流程
 
@@ -294,13 +437,6 @@ RBAC 权限控制、工具白名单、敏感操作拦截、OpenTelemetry Tracing
 - **单元测试**：模型路由、Tool Schema、分块策略、记忆读写
 - **集成测试**：对话链路、检索链路、工具调用、SSE 输出
 - **回归测试**：使用 Evals 数据集固定测试集，每次改 Prompt / 召回 / 路由后回归
-
-### 调试建议
-
-- 先关闭复杂工具，只保留一个最简单工具
-- 先验证流式输出，再验证 Agent 编排
-- 先验证检索链路，再接入 Rerank
-- 先做单领域，再扩展到多领域
 
 ---
 

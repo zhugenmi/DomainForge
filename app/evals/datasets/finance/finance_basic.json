@@ -1,0 +1,20 @@
+[
+  {
+    "id": "finance-001",
+    "query": "什么是货币基金？",
+    "expected_keywords": ["货币市场", "短期", "流动性"],
+    "expected_answer_keywords": ["货币市场"]
+  },
+  {
+    "id": "finance-002",
+    "query": "市盈率(P/E)如何计算？",
+    "expected_keywords": ["股价", "每股收益"],
+    "expected_answer_keywords": ["每股收益"]
+  },
+  {
+    "id": "finance-003",
+    "query": "什么是逆回购？",
+    "expected_keywords": ["央行", "买入", "到期"],
+    "expected_answer_keywords": ["央行"]
+  }
+]

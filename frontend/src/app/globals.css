@@ -1,0 +1,249 @@
+@import "tailwindcss";
+
+/* ============================================================
+   DomainForge — Light Console
+   干净、克制的浅色专业风。单一主蓝。系统字体。
+   ============================================================ */
+
+:root {
+  /* 背景层 */
+  --bg: #F7F8FA;
+  --bg-elevated: #FFFFFF;
+  --bg-surface: #FFFFFF;
+  --bg-surface-2: #F2F4F7;
+  --bg-hover: #EEF1F5;
+  --bg-input: #FFFFFF;
+
+  /* 边线 */
+  --border: #E5E7EB;
+  --border-bright: #D1D5DB;
+  --border-active: #93C5FD;
+
+  /* 文本 */
+  --text: #1F2937;
+  --text-dim: #4B5563;
+  --text-muted: #6B7280;
+  --text-faint: #9CA3AF;
+
+  /* 强调蓝 */
+  --accent: #2563EB;
+  --accent-hover: #1D4ED8;
+  --accent-dim: #EFF6FF;
+  --accent-glow: rgba(37, 99, 235, 0.18);
+  --accent-soft: rgba(37, 99, 235, 0.06);
+
+  /* 状态 */
+  --success: #10B981;
+  --success-dim: #ECFDF5;
+  --danger: #EF4444;
+  --danger-dim: #FEF2F2;
+  --warning: #F59E0B;
+  --warning-dim: #FFFBEB;
+
+  /* 布局 */
+  --sidebar-w: 248px;
+  --sidebar-w-collapsed: 64px;
+  --header-h: 56px;
+  --radius-sm: 6px;
+  --radius: 8px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.04);
+  --shadow: 0 1px 3px rgba(16, 24, 40, 0.06), 0 1px 2px rgba(16, 24, 40, 0.04);
+  --shadow-md: 0 4px 12px rgba(16, 24, 40, 0.08);
+  --shadow-lg: 0 12px 32px rgba(16, 24, 40, 0.12);
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-bg-elevated: var(--bg-elevated);
+  --color-bg-surface: var(--bg-surface);
+  --color-bg-surface-2: var(--bg-surface-2);
+  --color-bg-hover: var(--bg-hover);
+  --color-bg-input: var(--bg-input);
+
+  --color-border: var(--border);
+  --color-border-bright: var(--border-bright);
+  --color-border-active: var(--border-active);
+
+  --color-text: var(--text);
+  --color-text-dim: var(--text-dim);
+  --color-text-muted: var(--text-muted);
+  --color-text-faint: var(--text-faint);
+
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-dim: var(--accent-dim);
+  --color-accent-glow: var(--accent-glow);
+  --color-accent-soft: var(--accent-soft);
+
+  --color-success: var(--success);
+  --color-success-dim: var(--success-dim);
+  --color-danger: var(--danger);
+  --color-danger-dim: var(--danger-dim);
+  --color-warning: var(--warning);
+  --color-warning-dim: var(--warning-dim);
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-mono: ui-monospace, "JetBrains Mono", "SF Mono", Consolas,
+    "Liberation Mono", monospace;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-bright) transparent;
+}
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: var(--border-bright);
+  border-radius: 4px;
+}
+*::-webkit-scrollbar-thumb:hover { background: var(--text-faint); }
+
+html, body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--accent-dim);
+  color: var(--accent-hover);
+}
+
+/* --- 背景氛围：极淡的网格点 --- */
+.atmosphere {
+  background:
+    radial-gradient(circle at 20% 0%, rgba(37, 99, 235, 0.04), transparent 40%),
+    radial-gradient(circle at 100% 100%, rgba(37, 99, 235, 0.025), transparent 45%),
+    var(--bg);
+}
+
+.grid-lines {
+  background-image:
+    linear-gradient(rgba(37, 99, 235, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(37, 99, 235, 0.025) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+/* --- 卡片 --- */
+.card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+}
+
+.card-hover {
+  transition: box-shadow 150ms ease, border-color 150ms ease, transform 150ms ease;
+}
+.card-hover:hover {
+  border-color: var(--border-active);
+  box-shadow: var(--shadow-md);
+}
+
+/* --- 动画 --- */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.fade-up { animation: fadeUp 280ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.fade-in { animation: fadeIn 240ms ease-out both; }
+
+@keyframes pulseDot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.4; transform: scale(0.85); }
+}
+.pulse-dot { animation: pulseDot 1.6s ease-in-out infinite; }
+
+@keyframes typingPulse {
+  0%, 80%, 100% { opacity: 0.25; transform: translateY(0); }
+  40%           { opacity: 1; transform: translateY(-2px); }
+}
+.typing-dot { animation: typingPulse 1.2s ease-in-out infinite; }
+.typing-dot:nth-child(2) { animation-delay: 0.15s; }
+.typing-dot:nth-child(3) { animation-delay: 0.3s; }
+
+.stagger > * { animation: fadeUp 280ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+.stagger > *:nth-child(1) { animation-delay: 0ms; }
+.stagger > *:nth-child(2) { animation-delay: 40ms; }
+.stagger > *:nth-child(3) { animation-delay: 80ms; }
+.stagger > *:nth-child(4) { animation-delay: 120ms; }
+.stagger > *:nth-child(5) { animation-delay: 160ms; }
+.stagger > *:nth-child(6) { animation-delay: 200ms; }
+.stagger > *:nth-child(7) { animation-delay: 240ms; }
+.stagger > *:nth-child(8) { animation-delay: 280ms; }
+
+/* --- 焦点环 --- */
+.focus-ring { outline: none; }
+.focus-ring:focus-visible {
+  box-shadow: 0 0 0 2px var(--bg-elevated), 0 0 0 4px var(--accent-glow);
+  border-color: var(--accent);
+}
+
+/* --- 流式 tag 入场 --- */
+@keyframes tagIn {
+  from { opacity: 0; transform: translateY(-2px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.tag-in { animation: tagIn 180ms ease-out both; }
+
+/* --- 侧栏宽度过渡 --- */
+.sidebar-transition { transition: width 240ms cubic-bezier(0.4, 0, 0.2, 1); }
+
+/* --- 按钮 --- */
+.btn-primary {
+  background: var(--accent);
+  color: #FFFFFF;
+  border-radius: var(--radius);
+  border: 1px solid var(--accent);
+  transition: background 120ms ease, box-shadow 120ms ease;
+}
+.btn-primary:hover {
+  background: var(--accent-hover);
+  box-shadow: 0 1px 3px var(--accent-glow);
+}
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.btn-ghost {
+  background: var(--bg-surface);
+  color: var(--text-dim);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+.btn-ghost:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+  border-color: var(--border-bright);
+}
+
+/* --- 输入框 --- */
+.input {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+.input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+  outline: none;
+}
+
+textarea { field-sizing: content; }
+textarea::-webkit-resizer { display: none; }
