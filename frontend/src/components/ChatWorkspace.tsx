@@ -20,6 +20,8 @@ import {
   AlertCircle,
   ListChecks,
 } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 interface Message {
   id: string;
@@ -348,7 +350,15 @@ function MessageBubble({ msg }: { msg: Message }) {
         >
           {isUser ? "用户" : "助手"}
         </div>
-        <div className="whitespace-pre-wrap break-words">{msg.content}</div>
+        <div className="break-words">
+          {isUser ? (
+            <div className="whitespace-pre-wrap">{msg.content}</div>
+          ) : (
+            <div className="md-body">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+            </div>
+          )}
+        </div>
       </div>
       {isUser && (
         <div className="flex-shrink-0 w-8 h-8 grid place-items-center rounded-full bg-bg-surface-2 border border-border">
@@ -392,7 +402,9 @@ function StreamingBubble({ tags, answer }: { tags: StreamTag[]; answer: string }
             助手 · 实时
           </div>
           {answer ? (
-            <div className="whitespace-pre-wrap break-words">{answer}</div>
+            <div className="md-body break-words">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{answer}</ReactMarkdown>
+            </div>
           ) : (
             <div className="flex items-center gap-1.5 py-0.5">
               <span className="typing-dot w-1.5 h-1.5 rounded-full bg-accent" />
