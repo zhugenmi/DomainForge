@@ -4,7 +4,7 @@ import asyncio
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import admin, audit, chat, evals, health, knowledge, sessions
+from app.api import admin, agents, audit, chat, evals, health, knowledge, sessions
 from app.api.middleware.rate_limit import RateLimitMiddleware
 from app.configs.settings import settings
 from app.observability.logging.logger import get_logger, setup_logging
@@ -78,6 +78,7 @@ async def root():
     }
 app.include_router(chat.router, prefix="/api/v1")
 app.include_router(knowledge.router, prefix="/api/v1")
+app.include_router(agents.router, prefix="/api/v1")
 app.include_router(sessions.router, prefix="/api/v1")
 app.include_router(audit.router, prefix="/api/v1")
 app.include_router(evals.router, prefix="/api/v1")

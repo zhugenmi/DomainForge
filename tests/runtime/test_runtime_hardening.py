@@ -286,5 +286,32 @@ def test_build_runtime_uses_fallback():
     from app.api import chat as chat_mod
 
     src = inspect.getsource(chat_mod._build_runtime)
-    assert "get_fallback" in src
+    # agent 注入后，fallback 构造移至 _llm_for_agent；二者之一出现即满足"走 FallbackPolicy"的意图
+    assert "_llm_for_agent" in src
+    assert inspect.getsource(chat_mod._llm_for_agent).count("get_fallback") >= 1
     assert "get_chat_llm" not in src
+
+
+# ---------- 领域 agent 强制检索 ----------
+
+@pytest.mark.asyncio
+async def test_retrieval_forced_when_agent_domain_set():
+    """agent_domain 非空时，即便 intent=chat 也应触发 retrieval 节点。
+
+    回归：领域 agent 绑定后，意图分类为 chat 会导致 RetrievalNode 被跳过，
+    进而 LLM 在无检索上下文时幻觉出 <knowledge_base_query> 标签而非作答。
+    """
+    retrieval = _DelayNode("retrieved_docs", 0.01)
+    answer = _AnswerNode()
+    intent = _SetIntentNode(intent="chat")  # 关键：意图为 chat
+
+    nodes = {"intent": intent, "retrieval": retrieval, "tool": _DelayNode("tool_results", 0.01), "answer": answer}
+    order = ["intent", "retrieval", "tool", "answer"]
+    strategy = ConditionalStrategy(nodes, order)
+
+    state = AgentState(query="宪法如何规定国徽")
+    state.agent_domain = "legal"  # 领域 agent 注入
+    state = await strategy.run(state)
+
+    assert retrieval.started_at is not None, "agent_domain 非空时 retrieval 必须执行"
+    assert state.retrieved_docs == [{"done": True}]

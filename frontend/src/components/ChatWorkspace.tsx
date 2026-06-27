@@ -7,7 +7,16 @@ import {
   useState,
   type KeyboardEvent,
 } from "react";
-import { chatStream, getSessionMessages, type MessageInfo, type SSEEvent } from "@/lib/api";
+import {
+  chatStream,
+  getSession,
+  getSessionMessages,
+  listAgents,
+  updateSession,
+  type AgentInfo,
+  type MessageInfo,
+  type SSEEvent,
+} from "@/lib/api";
 import {
   Loader2,
   ArrowUp,
@@ -86,8 +95,14 @@ export default function ChatWorkspace() {
   const [streamTags, setStreamTags] = useState<StreamTag[]>([]);
   const [streamAnswer, setStreamAnswer] = useState("");
   const [resetTick, setResetTick] = useState(0);
+  const [agents, setAgents] = useState<AgentInfo[]>([]);
+  const [currentAgentId, setCurrentAgentId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    listAgents().then(setAgents).catch(() => setAgents([]));
+  }, []);
 
   const reset = useCallback(() => {
     setMessages([]);
@@ -96,6 +111,7 @@ export default function ChatWorkspace() {
     setStreamAnswer("");
     setInput("");
     setStreaming(false);
+    setCurrentAgentId(null);
     setResetTick((t) => t + 1);
     setTimeout(() => inputRef.current?.focus(), 0);
   }, []);
@@ -103,7 +119,10 @@ export default function ChatWorkspace() {
   // 加载已有会话的消息
   const loadSession = useCallback(async (sid: string) => {
     try {
-      const msgs = await getSessionMessages(sid);
+      const [msgs, sess] = await Promise.all([
+        getSessionMessages(sid),
+        getSession(sid).catch(() => null),
+      ]);
       setMessages(
         msgs
           .filter((m) => m.role === "user" || m.role === "assistant")
@@ -114,6 +133,7 @@ export default function ChatWorkspace() {
           })),
       );
       setSessionId(sid);
+      setCurrentAgentId(sess?.agent_id ?? null);
       setStreamTags([]);
       setStreamAnswer("");
       setStreaming(false);
@@ -232,6 +252,29 @@ export default function ChatWorkspace() {
           )}
         </div>
         <div className="flex items-center gap-3 text-[11px] text-text-muted">
+          <select
+            className="rounded border border-border bg-bg-surface px-2 py-1 text-[12px] text-text focus-ring disabled:opacity-50"
+            value={currentAgentId ?? ""}
+            disabled={!sessionId || streaming}
+            title={sessionId ? "切换智能体" : "新会话开始后再选择智能体"}
+            onChange={async (e) => {
+              if (!sessionId) return;
+              const val = e.target.value || null;
+              try {
+                await updateSession(sessionId, { agent_id: val });
+                setCurrentAgentId(val);
+              } catch {
+                // ignore
+              }
+            }}
+          >
+            <option value="">默认（无 agent）</option>
+            {agents.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name}
+              </option>
+            ))}
+          </select>
           <span>{messages.filter((m) => m.role === "user").length} 条提问</span>
           <span className="text-border-bright">|</span>
           <span>{streaming ? "流式输出" : "空闲"}</span>

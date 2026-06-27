@@ -70,7 +70,13 @@ class ConditionalStrategy:
 
     def _will_run(self, state: AgentState, name: str) -> bool:
         if name == "retrieval":
-            return state.intent == "knowledge" or _plan_needs(state, "retrieve")
+            # agent_domain 非空时强制检索：领域 agent 的存在本身表明需要领域知识，
+            # 不应依赖意图分类（分类器常把领域问题判为 chat，导致 agent 拿不到上下文）
+            return (
+                state.intent == "knowledge"
+                or _plan_needs(state, "retrieve")
+                or bool(state.agent_domain)
+            )
         if name == "tool":
             return state.intent == "tool" or _plan_needs(state, "tool")
         return True

@@ -15,6 +15,7 @@
 - **会话记忆** — 分层记忆管理（短期 / 摘要 / 长期）
 - **结果反思** — 执行结果质量评估与自动纠错重试
 - **流式输出** — SSE 实时推送执行中间状态
+- **自定义智能体** — 用户可创建/编辑/删除智能体，配置名称、简介、说明（system prompt）、模型、温度、绑定知识库；会话绑定 agent 后按其配置注入 prompt/domain/模型。系统默认提供法律咨询 builtin agent（绑定 legal 知识库）。详见 [自定义 Agent 模块文档](docs/agent_module.md)
 
 ### RAG 能力
 
@@ -287,6 +288,7 @@ cp .env.example .env
 LLM_API_KEY=sk-xxx                  # 必填
 LLM_BASE_URL=https://api.openai.com/v1  # 按需改为 DeepSeek/GLM/Qwen 的端点
 DEFAULT_LLM_MODEL=gpt-4o            # 按需改为对应模型名
+AVAILABLE_MODELS=gpt-4o,gpt-4o-mini  # 自定义 Agent 表单下拉的可选模型（逗号分隔，为空则回退到 DEFAULT_LLM_MODEL）
 
 # Embedding — 向量模型（可与对话模型使用不同服务）
 EMBEDDING_API_KEY=sk-xxx            # 默认复用 LLM_API_KEY

@@ -70,7 +70,13 @@ class AnswerNode(BaseNode):
             context_parts.append(f"工具执行结果：\n{results}")
 
         context = "\n\n".join(context_parts) if context_parts else "无额外上下文"
-        system_prompt = ANSWER_SYSTEM_PROMPT.format(context=context)
+        base_prompt = (
+            state.agent_system_prompt if state.agent_system_prompt else ANSWER_SYSTEM_PROMPT
+        )
+        if "{context}" in base_prompt:
+            system_prompt = base_prompt.format(context=context)
+        else:
+            system_prompt = f"{base_prompt}\n\n参考信息：\n{context}"
 
         messages = [{"role": "system", "content": system_prompt}] + state.messages + [{"role": "user", "content": state.query}]
         answer = await self.llm.generate(messages=messages)

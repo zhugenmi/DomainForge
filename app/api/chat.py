@@ -2,17 +2,23 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.configs.settings import settings
+from app.database.models.agent import Agent
+from app.database.models.session import Session
+from app.database.repositories.agent_repo import AgentRepo
 from app.database.repositories.message_repo import MessageRepo
 from app.database.repositories.session_repo import SessionRepo
 from app.database.repositories.user_repo import UserRepo
 from app.database.session import get_db
 from app.llm.embedding.embedding_service import EmbeddingService
+from app.llm.router.fallback import FallbackPolicy
 from app.llm.router.model_router import ModelRouter
 from app.observability.audit.audit_service import AuditService
+from app.observability.logging.logger import get_logger
 from app.observability.tracing.tracer import request_trace
 from app.memory.memory_service import MemoryService
 from app.rag.retrieval.vector import VectorRetriever
@@ -48,11 +54,55 @@ async def _ensure_default_user(db: AsyncSession):
     return await UserRepo(db).get_or_create_default()
 
 
+async def _resolve_agent(
+    db: AsyncSession, request_agent_id: uuid.UUID | None, session: Session | None
+) -> Agent | None:
+    """解析生效 agent：request 覆盖 session，二者皆无返回 None。"""
+    aid = request_agent_id or (session.agent_id if session else None)
+    if aid is None:
+        return None
+    agent = await AgentRepo(db).get(aid)
+    if agent is None:
+        raise HTTPException(status_code=404, detail="agent not found")
+    return agent
+
+
+def _llm_for_agent(agent: Agent | None) -> FallbackPolicy:
+    """按 agent.model_name 构造 LLM；agent 为 None 或构造失败时回退全局 fallback。
+
+    model_name 为空（如 builtin seed）时回退到 settings.DEFAULT_LLM_MODEL。
+    """
+    router = ModelRouter()
+    if agent is None:
+        return router.get_fallback()
+    try:
+        provider = router.get_provider()
+        model = agent.model_name or settings.DEFAULT_LLM_MODEL
+        if model:
+            provider.model = model
+        secondary_name = settings.FALLBACK_LLM_PROVIDER
+        secondary = router.get_provider(secondary_name) if secondary_name else None
+        return FallbackPolicy(primary=provider, secondary=secondary)
+    except Exception:
+        get_logger("chat.agent").warning("agent_llm_build_failed", agent=str(agent.id))
+        return router.get_fallback()
+
+
+def _apply_agent_to_state(state: AgentState, agent: Agent | None) -> AgentState:
+    if agent is not None:
+        state.agent_system_prompt = agent.system_prompt
+        state.agent_domain = agent.domain
+    return state
+
+
 async def _build_runtime(
-    db: AsyncSession, session_id: uuid.UUID, user_id: uuid.UUID | None = None
+    db: AsyncSession,
+    session_id: uuid.UUID,
+    user_id: uuid.UUID | None = None,
+    agent: Agent | None = None,
 ) -> AgentRuntime:
     # 主链路接入 FallbackPolicy：主 provider 失败自动切备，无 secondary 时等价单 provider
-    llm = ModelRouter().get_fallback()
+    llm = _llm_for_agent(agent)
     embedder = EmbeddingService(llm=llm)
     memory_service = MemoryService(
         db=db, llm=llm, session_id=session_id, user_id=user_id or uuid.UUID("00000000-0000-0000-0000-000000000001"), embedder=embedder
@@ -121,10 +171,12 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
             intent=cached.get("intent", "chat"),
         )
 
+    agent = await _resolve_agent(db, request.agent_id, session)
     with request_trace("chat", session_id=str(request.session_id)) as span:
         await audit.log(span.trace_id, "chat_request", {"query": request.query, "session_id": str(request.session_id)})
-        runtime = await _build_runtime(db, request.session_id, user_id=user.id)
+        runtime = await _build_runtime(db, request.session_id, user_id=user.id, agent=agent)
         state = AgentState(query=request.query)
+        _apply_agent_to_state(state, agent)
         state = await runtime.run(state)
         await audit.log(span.trace_id, "chat_response", {"intent": state.intent, "answer_len": len(state.final_answer)})
 
@@ -176,8 +228,10 @@ async def chat_stream(query: str, session_id: uuid.UUID | None = None, db: Async
 
         return StreamingResponse(_blocked_stream(), media_type="text/event-stream")
 
-    runtime = await _build_runtime(db, session_id, user_id=user.id)
+    agent = await _resolve_agent(db, None, session)
+    runtime = await _build_runtime(db, session_id, user_id=user.id, agent=agent)
     state = AgentState(query=query)
+    _apply_agent_to_state(state, agent)
 
     # 流式场景的缓存命中：把缓存答案作为单个 final_answer 事件回放
     cached_stream = await _try_cache(session_id, query)

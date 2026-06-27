@@ -22,3 +22,6 @@ class AgentState:
     pending_tool_calls: list = field(default_factory=list)
     # 暂挂起始时间戳（monotonic-ish），用于超时跳过；0.0 表示未暂挂
     pending_since: float = 0.0
+    # agent 配置注入：system_prompt 非空时覆盖 AnswerNode 默认；domain 非空时过滤检索
+    agent_system_prompt: str = ""
+    agent_domain: str | None = None

@@ -40,6 +40,7 @@ export interface SessionInfo {
   user_id: string;
   title: string;
   created_at: string | null;
+  agent_id?: string | null;
 }
 
 export interface MessageInfo {
@@ -325,4 +326,100 @@ export async function listTools(): Promise<ToolInfo[]> {
 
 export async function getMetrics(): Promise<MetricsSnapshot> {
   return getJSON<MetricsSnapshot>(`${API_BASE}/admin/metrics`);
+}
+
+// ---------- Agents ----------
+
+export interface AgentInfo {
+  id: string;
+  name: string;
+  description: string;
+  system_prompt: string;
+  model_name: string;
+  temperature: number;
+  domain: string | null;
+  is_builtin: boolean;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface AgentCreateInput {
+  name: string;
+  description?: string;
+  system_prompt?: string;
+  model_name: string;
+  temperature?: number;
+  domain?: string | null;
+}
+
+export interface AgentUpdateInput {
+  name?: string;
+  description?: string;
+  system_prompt?: string;
+  model_name?: string;
+  temperature?: number;
+  domain?: string | null;
+}
+
+export async function listAgents(): Promise<AgentInfo[]> {
+  return getJSON<AgentInfo[]>(`${API_BASE}/agents`);
+}
+
+export async function listAgentModels(): Promise<string[]> {
+  return getJSON<string[]>(`${API_BASE}/agents/models`);
+}
+
+export async function getAgent(id: string): Promise<AgentInfo> {
+  return getJSON<AgentInfo>(`${API_BASE}/agents/${id}`);
+}
+
+export async function createAgent(input: AgentCreateInput): Promise<AgentInfo> {
+  const res = await fetch(`${API_BASE}/agents`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw new Error((await res.text()) || "createAgent failed");
+  return res.json();
+}
+
+export async function updateAgent(id: string, input: AgentUpdateInput): Promise<AgentInfo> {
+  const res = await fetch(`${API_BASE}/agents/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw new Error((await res.text()) || "updateAgent failed");
+  return res.json();
+}
+
+export async function deleteAgent(id: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/agents/${id}`, { method: "DELETE" });
+  if (!res.ok && res.status !== 204) throw new Error("deleteAgent failed");
+}
+
+// ---------- Session agent binding ----------
+
+export interface SessionUpdateInput {
+  agent_id?: string | null;
+}
+
+export async function updateSession(id: string, input: SessionUpdateInput): Promise<SessionInfo> {
+  const res = await fetch(`${API_BASE}/sessions/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw new Error((await res.text()) || "updateSession failed");
+  return res.json();
+}
+
+export async function createSessionWithAgent(agentId: string | null): Promise<SessionInfo> {
+  const res = await fetch(`${API_BASE}/sessions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ agent_id: agentId }),
+  });
+  if (!res.ok) throw new Error("createSession failed");
+  return res.json();
 }

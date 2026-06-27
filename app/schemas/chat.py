@@ -20,6 +20,7 @@ class SSEEventType(str, Enum):
 class ChatRequest(BaseModel):
     query: str
     session_id: uuid.UUID | None = None
+    agent_id: uuid.UUID | None = None
 
 
 class ChatResponse(BaseModel):

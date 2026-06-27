@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     LLM_BASE_URL: str = "https://api.openai.com/v1"
     FALLBACK_LLM_PROVIDER: str = ""
     FALLBACK_LLM_MODEL: str = ""
+    # 可用模型列表（逗号分隔），供 agent 表单下拉；为空则回退到 [DEFAULT_LLM_MODEL]
+    AVAILABLE_MODELS: str = ""
 
     # Embedding
     EMBEDDING_BASE_URL: str = "https://api.openai.com/v1"
