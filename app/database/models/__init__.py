@@ -1,3 +1,4 @@
+from app.database.models.agent import Agent
 from app.database.models.audit_log import AuditLog
 from app.database.models.category import Category
 from app.database.models.chunk import DocumentChunk
@@ -18,4 +19,5 @@ __all__ = [
     "AuditLog",
     "EvalResult",
     "Category",
+    "Agent",
 ]
