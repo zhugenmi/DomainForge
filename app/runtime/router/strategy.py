@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 from app.runtime.nodes.base import BaseNode
 from app.runtime.state.agent_state import AgentState
 
@@ -17,7 +19,7 @@ class LinearStrategy:
 
 
 class ConditionalStrategy:
-    """根据 state.intent 跳过不需要的节点；支持 reflection 重路由。"""
+    """根据 state.intent 跳过不需要的节点；支持 reflection 重路由与 retrieval/tool 并行。"""
 
     def __init__(self, nodes_by_name: dict[str, BaseNode], order: list[str], max_iterations: int = 6):
         self.nodes = nodes_by_name
@@ -30,16 +32,30 @@ class ConditionalStrategy:
         iterations = 0
         while i < len(self.order) and iterations < self.max_iterations:
             name = self.order[i]
-            node = self.nodes[name]
-            if name == "retrieval" and state.intent != "knowledge" and not _plan_needs(state, "retrieve"):
+
+            # 并行机会：retrieval 与 tool 都将执行，且 retrieval 结果不被 tool 消费
+            # （两者写 state 不同字段：retrieved_docs / tool_results，无竞争）
+            if name == "retrieval" and self._will_run(state, "retrieval"):
+                tool_idx = self._next_runnable_index(state, "tool", i + 1)
+                if tool_idx is not None:
+                    await asyncio.gather(
+                        self.nodes["retrieval"].execute(state),
+                        self.nodes["tool"].execute(state),
+                    )
+                    i = tool_idx + 1
+                    iterations += 2
+                    continue
+
+            if name == "retrieval" and not self._will_run(state, "retrieval"):
                 i += 1
                 iterations += 1
                 continue
-            if name == "tool" and state.intent != "tool" and not _plan_needs(state, "tool"):
+            if name == "tool" and not self._will_run(state, "tool"):
                 i += 1
                 iterations += 1
                 continue
-            state = await node.execute(state)
+
+            state = await self.nodes[name].execute(state)
             reroute = getattr(state, "_reflection_reroute", None)
             if reroute:
                 setattr(state, "_reflection_reroute", None)
@@ -51,6 +67,19 @@ class ConditionalStrategy:
             i += 1
             iterations += 1
         return state
+
+    def _will_run(self, state: AgentState, name: str) -> bool:
+        if name == "retrieval":
+            return state.intent == "knowledge" or _plan_needs(state, "retrieve")
+        if name == "tool":
+            return state.intent == "tool" or _plan_needs(state, "tool")
+        return True
+
+    def _next_runnable_index(self, state: AgentState, name: str, start: int) -> int | None:
+        for j in range(start, len(self.order)):
+            if self.order[j] == name and self._will_run(state, name):
+                return j
+        return None
 
 
 def _plan_needs(state: AgentState, action: str) -> bool:

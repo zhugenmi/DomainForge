@@ -7,6 +7,7 @@ from typing import Any, Callable, Awaitable
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.configs.settings import settings
 from app.database.models.eval_result import EvalResult
 from app.evals.metrics.correctness import correctness_score
 from app.evals.metrics.groundedness import groundedness_score
@@ -35,6 +36,8 @@ class CaseResult:
     retrieval_recall: float
     context_precision: float
     latency_ms: float
+    llm_correctness: float = 0.0
+    llm_groundedness: float = 0.0
 
 
 def load_dataset(name: str) -> list[EvalCase]:
@@ -59,8 +62,14 @@ RunFn = Callable[[str], Awaitable[tuple[str, list[str], float]]]
 
 
 class EvalRunner:
-    def __init__(self, db: AsyncSession | None = None):
+    def __init__(
+        self,
+        db: AsyncSession | None = None,
+        judge_llm: Any | None = None,
+    ):
         self.db = db
+        self.judge_llm = judge_llm
+        self.llm_judge_enabled = settings.EVALS_LLM_JUDGE and judge_llm is not None
 
     async def run(self, dataset_name: str, run_fn: RunFn) -> list[CaseResult]:
         cases = load_dataset(dataset_name)
@@ -76,25 +85,47 @@ class EvalRunner:
                 context_precision=context_precision(contexts, c.expected_keywords),
                 latency_ms=latency_ms,
             )
+
+            if self.llm_judge_enabled:
+                # 延迟导入避免无 judge 时也加载 llm_judge（其 import 链含 LLMProvider）
+                from app.evals.metrics.llm_judge import score as llm_score
+
+                cr.llm_correctness, _ = await llm_score(
+                    self.judge_llm, c.query, answer, contexts, "correctness"
+                )
+                cr.llm_groundedness, _ = await llm_score(
+                    self.judge_llm, c.query, answer, contexts, "groundedness"
+                )
+
             results.append(cr)
             if self.db is not None:
                 await self._persist(dataset_name, cr)
-            logger.info("eval_case", dataset=dataset_name, case=c.id, correctness=cr.correctness)
+            logger.info(
+                "eval_case",
+                dataset=dataset_name,
+                case=c.id,
+                correctness=cr.correctness,
+                llm_correctness=cr.llm_correctness,
+            )
         return results
 
     async def _persist(self, dataset: str, cr: CaseResult) -> None:
-        for metric, score in [
+        pairs = [
             ("correctness", cr.correctness),
             ("groundedness", cr.groundedness),
             ("retrieval_recall", cr.retrieval_recall),
             ("context_precision", cr.context_precision),
             ("latency_ms", cr.latency_ms),
-        ]:
+        ]
+        if self.llm_judge_enabled:
+            pairs.append(("llm_correctness", cr.llm_correctness))
+            pairs.append(("llm_groundedness", cr.llm_groundedness))
+        for metric, score_val in pairs:
             self.db.add(  # type: ignore[union-attr]
                 EvalResult(
                     dataset_name=dataset,
                     metric=metric,
-                    score=float(score),
+                    score=float(score_val),
                     payload={"case_id": cr.case_id},
                 )
             )

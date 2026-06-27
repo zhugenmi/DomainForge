@@ -10,17 +10,35 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.models.chunk import DocumentChunk
 from app.database.repositories.document_repo import DocumentRepo
+from app.observability.logging.logger import get_logger
+
+logger = get_logger("rag.bm25")
 
 _TOKEN_RE = re.compile(r"[\w]+", re.UNICODE)
 
+# jieba 为可选依赖：可用则中文按词切，提升短语级召回；不可用退化为字切。
+try:
+    import jieba  # type: ignore
+
+    _JIEBA_AVAILABLE = True
+except ImportError:
+    _JIEBA_AVAILABLE = False
+
+
+def _is_cjk(ch: str) -> bool:
+    return "一" <= ch <= "鿿"
+
 
 def tokenize(text: str) -> list[str]:
-    """简易分词：CJK 按字，其他按词。无 jieba 依赖。"""
+    """分词：jieba 可用时中文按词切，否则 CJK 按字 + 其他按词。"""
     if not text:
         return []
+    if _JIEBA_AVAILABLE:
+        return [t for t in jieba.cut_for_search(text.lower()) if t.strip()]
+    # 退路：CJK 按字，其他按词
     tokens: list[str] = []
     for w in _TOKEN_RE.findall(text.lower()):
-        if any("一" <= c <= "鿿" for c in w):
+        if any(_is_cjk(c) for c in w):
             tokens.extend(list(w))
         else:
             tokens.append(w)
@@ -82,23 +100,33 @@ class BM25Retriever:
         self.db = db
         self.repo = repo or DocumentRepo(db)
 
-    async def search(self, query: str, top_k: int = 10) -> list[DocumentChunk]:
+    async def search(self, query: str, top_k: int = 10, domain: str | None = None) -> list[DocumentChunk]:
         if _is_postgres(self.db):
             try:
-                return await self._search_pg(query, top_k)
+                return await self._search_pg(query, top_k, domain)
             except Exception:
                 pass
-        return await self._search_fallback(query, top_k)
+        return await self._search_fallback(query, top_k, domain)
 
-    async def _search_pg(self, query: str, top_k: int) -> list[DocumentChunk]:
+    async def _search_pg(self, query: str, top_k: int, domain: str | None) -> list[DocumentChunk]:
         escaped = query.replace("'", "''")
-        sql = text(
-            "SELECT * FROM document_chunks "
-            "WHERE tsv @@ plainto_tsquery('simple', :q) "
-            "ORDER BY ts_rank(tsv, plainto_tsquery('simple', :q)) DESC "
-            "LIMIT :k"
-        )
-        result = await self.db.execute(sql, {"q": escaped, "k": top_k})
+        if domain is not None:
+            sql = text(
+                "SELECT dc.* FROM document_chunks dc "
+                "JOIN documents d ON dc.document_id = d.id "
+                "WHERE dc.tsv @@ plainto_tsquery('simple', :q) AND d.domain = :domain "
+                "ORDER BY ts_rank(dc.tsv, plainto_tsquery('simple', :q)) DESC "
+                "LIMIT :k"
+            )
+            result = await self.db.execute(sql, {"q": escaped, "domain": domain, "k": top_k})
+        else:
+            sql = text(
+                "SELECT * FROM document_chunks "
+                "WHERE tsv @@ plainto_tsquery('simple', :q) "
+                "ORDER BY ts_rank(tsv, plainto_tsquery('simple', :q)) DESC "
+                "LIMIT :k"
+            )
+            result = await self.db.execute(sql, {"q": escaped, "k": top_k})
         rows = result.mappings().all()
         chunks: list[DocumentChunk] = []
         for row in rows:
@@ -111,9 +139,12 @@ class BM25Retriever:
             chunks.append(c)
         return chunks
 
-    async def _search_fallback(self, query: str, top_k: int) -> list[DocumentChunk]:
-        result = await self.db.execute(select(DocumentChunk).limit(1000))
-        all_chunks = list(result.scalars().all())
+    async def _search_fallback(self, query: str, top_k: int, domain: str | None) -> list[DocumentChunk]:
+        if domain is not None:
+            all_chunks = await self.repo.list_chunks_by_domain(domain, limit=1000)
+        else:
+            result = await self.db.execute(select(DocumentChunk).limit(1000))
+            all_chunks = list(result.scalars().all())
         idx = BM25Index()
         for c in all_chunks:
             idx.add(c.id, c.content)

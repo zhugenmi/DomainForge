@@ -28,8 +28,20 @@ def test_parse_html_strips_tags():
 
 def test_tokenize_cjk_by_char():
     tokens = tokenize("合同法 第三条")
-    assert "合" in tokens
-    assert "条" in tokens
+    # jieba 未安装时走字切；安装后走词切。两种情况下都应产生非空 token
+    assert len(tokens) > 0
+    # 字切路径下验证单字；词切路径下验证词含 CJK 字符
+    from app.rag.retrieval.bm25 import _JIEBA_AVAILABLE
+    if not _JIEBA_AVAILABLE:
+        assert "合" in tokens
+        assert "条" in tokens
+    else:
+        assert any("合" in t for t in tokens)
+
+
+def test_tokenize_handles_empty():
+    assert tokenize("") == []
+    assert tokenize(None) == []  # type: ignore[arg-type]
 
 
 def test_semantic_chunker_basic():

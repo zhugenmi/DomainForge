@@ -13,6 +13,14 @@ from app.database.models.category import Category
 @pytest.fixture
 def app_with_sqlite_and_categories(monkeypatch):
     """sqlite 内存库 + seed 5 个内置类别。"""
+    # 测试隔离：禁用 Redis，preview_store/cache/rate_limit 走进程内退路，
+    # 避免 TestClient 每请求新事件循环导致 Redis 单例 "Event loop is closed"。
+    from app.configs.settings import settings
+    from app.services.redis import reset_redis_for_test
+
+    monkeypatch.setattr(settings, "REDIS_ENABLED", False)
+    reset_redis_for_test()
+
     engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
 
     async def _init():

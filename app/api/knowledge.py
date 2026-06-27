@@ -245,6 +245,11 @@ async def confirm_import(req: ConfirmRequest, db: AsyncSession = Depends(get_db)
 
     await preview_store.remove(req.session_id)
     await db.commit()
+    # 知识库变更，清除 chat 与 rag 检索缓存避免脏读
+    from app.services.cache import cache_clear_prefix
+
+    await cache_clear_prefix("chat:")
+    await cache_clear_prefix("rag:")
     return ConfirmResponse(document_ids=document_ids, total_chunks=total_chunks)
 
 
@@ -260,6 +265,11 @@ async def delete_document(document_id: uuid.UUID, db: AsyncSession = Depends(get
     if not ok:
         raise HTTPException(status_code=404, detail="document not found")
     await db.commit()
+    # 知识库变更，清除 chat 与 rag 检索缓存避免脏读
+    from app.services.cache import cache_clear_prefix
+
+    await cache_clear_prefix("chat:")
+    await cache_clear_prefix("rag:")
     return {"deleted": str(document_id)}
 
 
@@ -273,12 +283,13 @@ async def search_knowledge(
     query: str,
     top_k: int = 5,
     mode: str = "hybrid",
+    domain: str | None = None,
     db: AsyncSession = Depends(get_db),
 ):
     llm = OpenAIProvider()
     retriever = VectorRetriever(db=db, llm=llm)
     rag_service = RAGService(db=db, retriever=retriever, llm=llm, mode=mode)  # type: ignore[arg-type]
-    results = await rag_service.search(query, top_k=top_k, mode=mode)  # type: ignore[arg-type]
+    results = await rag_service.search(query, top_k=top_k, mode=mode, domain=domain)  # type: ignore[arg-type]
     return SearchResponse(
         results=[
             ChunkResult(

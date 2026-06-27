@@ -228,12 +228,21 @@ domainforge/
 │   └── nginx/
 │
 ├── docs/                                 # 项目技术文档
-│   ├── architecture.md                   # 系统架构
-│   ├── runtime_design.md                 # Runtime 设计
-│   ├── rag_design.md                     # RAG 设计
-│   ├── database_design.md                # 数据库设计
-│   ├── api_design.md                     # API 设计
-│   └── deployment.md                     # 部署文档
+│   ├── README.md                         # 文档门户与阅读指引
+│   ├── api_reference.md                  # API 端点级契约
+│   ├── phase1_implementation.md          # Phase 1 主链路打通回顾
+│   ├── phase2_knowledge_module.md        # Phase 2 知识库两阶段导入
+│   ├── architecture/                     # 当前架构权威文档（按能力域分篇）
+│   │   ├── README.md
+│   │   ├── 01_orchestration_engine.md    # 编排引擎
+│   │   ├── 02_model_capability.md        # 模型与能力层
+│   │   ├── 03_enhanced_rag.md            # 增强检索
+│   │   ├── 04_backend_service.md         # 后端服务
+│   │   └── 05_observability_evals.md     # 可观测性与评测
+│   └── plan/                             # 实现计划（按模块组织）
+│       ├── design.md                     # 项目原始设计稿（架构源头）
+│       ├── full-implementation.md        # 全量实现计划与进度
+│       └── frontend-redesign.md          # 前端重设计（已废弃，留存作历史）
 │
 ├── .env.example                          # 环境变量模板
 ├── docker-compose.yml                    # 本地开发环境
@@ -391,36 +400,6 @@ curl -X POST http://localhost:8000/api/v1/knowledge/index \
 # 检索知识库
 curl "http://localhost:8000/api/v1/knowledge/search?query=合同效力&top_k=5"
 ```
-
----
-
-## 前端
-
-前端基于 Next.js 16 + Tailwind CSS v4，提供浅色专业风格的可视化交互界面。
-
-### 页面
-
-| 页面 | 路径 | 说明 |
-|------|------|------|
-| 对话 | `/` | SSE 流式对话，意图/规划/检索/工具/反思中间状态实时展示 |
-| 知识库 | `/knowledge` | 文档导入 + 知识库检索测试（hybrid/vector/bm25 三种模式） |
-| 技能 | `/skills` | 已注册工具一览（含参数、权限、超时） |
-| 审计 | `/audit` | 最近审计日志查询 |
-| 评测 | `/evals` | 评测集运行 + 历史结果 |
-
-### 设计
-
-- **配色**：浅色（背景 `#F7F8FA` / 卡片 `#FFFFFF`）+ 单一主蓝 `#2563EB` + 状态色（成功/警告/危险）
-- **字体**：系统 sans 优先（PingFang SC / 微软雅黑）
-- **圆角**：卡片 12px、按钮 8px
-- **侧栏**：可折叠，包含品牌区 + 开启新会话 + 会话历史 + 模块导航 + 健康状态
-
-### 技术实现
-
-- API 请求封装在 `src/lib/api.ts`，覆盖 chat/SSE/sessions/audit/evals/admin 等接口
-- 后端 CORS 已对前端 dev origin 放行
-- 组件全为客户端组件（`"use client"`），对话页通过 `async generator` 逐步消费 SSE 事件流
-
 ---
 
 ## 贡献

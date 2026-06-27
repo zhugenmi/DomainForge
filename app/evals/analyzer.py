@@ -21,6 +21,11 @@ class BadCaseAnalyzer:
             metric_scores["groundedness"].append(r.groundedness)
             metric_scores["retrieval_recall"].append(r.retrieval_recall)
             metric_scores["context_precision"].append(r.context_precision)
+            # LLM-judge 指标仅在启用且有分数时纳入弱指标计算
+            if r.llm_correctness > 0:
+                metric_scores["llm_correctness"].append(r.llm_correctness)
+            if r.llm_groundedness > 0:
+                metric_scores["llm_groundedness"].append(r.llm_groundedness)
         avg = {k: sum(v) / len(v) for k, v in metric_scores.items()}
         weak = min(avg.items(), key=lambda x: x[1])[0] if avg else None
         return {

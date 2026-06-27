@@ -4,14 +4,19 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.models.user import User
+from app.security.password import hash_password
 
 
 class UserRepo:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def create(self, username: str, role: str = "user") -> User:
-        user = User(username=username, role=role)
+    async def create(self, username: str, role: str = "user", password: str | None = None) -> User:
+        user = User(
+            username=username,
+            role=role,
+            password_hash=hash_password(password) if password else None,
+        )
         self.db.add(user)
         await self.db.flush()
         return user
@@ -26,6 +31,11 @@ class UserRepo:
     async def list_all(self, limit: int = 100) -> list[User]:
         result = await self.db.execute(select(User).limit(limit))
         return list(result.scalars().all())
+
+    async def set_password(self, user: User, password: str) -> User:
+        user.password_hash = hash_password(password)
+        await self.db.flush()
+        return user
 
     async def get_or_create_default(self) -> User:
         default_id = uuid.UUID("00000000-0000-0000-0000-000000000001")

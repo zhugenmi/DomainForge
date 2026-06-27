@@ -14,7 +14,7 @@ class VectorRetriever:
         self.repo = repo or DocumentRepo(db)
         self.llm = llm
 
-    async def search(self, query: str, top_k: int = 5) -> list[DocumentChunk]:
+    async def search(self, query: str, top_k: int = 5, domain: str | None = None) -> list[DocumentChunk]:
         embeddings = await self.llm.embed([query])
         query_embedding = embeddings[0]
-        return await self.repo.vector_search(query_embedding, top_k=top_k)
+        return await self.repo.vector_search(query_embedding, top_k=top_k, domain=domain)

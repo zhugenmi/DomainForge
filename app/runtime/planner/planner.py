@@ -5,7 +5,7 @@ from app.runtime.events.event_bus import EventBus
 from app.runtime.events.event_type import SSEEventType
 from app.runtime.nodes.base import BaseNode
 from app.runtime.planner.prompt import PLANNING_PROMPT
-from app.runtime.planner.task_decomposer import needs_planning, parse_plan
+from app.runtime.planner.task_decomposer import should_plan, parse_plan
 from app.runtime.state.agent_state import AgentState
 
 
@@ -15,7 +15,7 @@ class PlannerNode(BaseNode):
         self.event_bus = event_bus
 
     async def execute(self, state: AgentState) -> AgentState:
-        if not needs_planning(state.query):
+        if not should_plan(state):
             state.plan = []
             return state
         prompt = PLANNING_PROMPT.format(query=state.query)

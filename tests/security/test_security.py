@@ -1,6 +1,8 @@
 import pytest
 
+from app.configs.settings import Settings
 from app.security.jwt import create_token, decode_token
+from app.security.password import hash_password, verify_password
 from app.security.permission import require_role
 from app.security.prompt_guard import check_prompt, sanitize_prompt
 from app.security.content_filter import check_content, mask_pii
@@ -12,6 +14,48 @@ def test_jwt_sign_verify():
     assert claims["sub"] == "u1"
     assert claims["role"] == "admin"
     assert "exp" in claims
+
+
+def test_jwt_secret_validator_rejects_default_in_prod():
+    with pytest.raises(Exception):
+        Settings(APP_ENV="prod", JWT_SECRET="change-me-in-production")
+
+
+def test_jwt_secret_validator_rejects_short_in_prod():
+    with pytest.raises(Exception):
+        Settings(APP_ENV="prod", JWT_SECRET="shortkey")
+
+
+def test_jwt_secret_validator_allows_strong_in_prod():
+    s = Settings(APP_ENV="prod", JWT_SECRET="a" * 32)
+    assert s.JWT_SECRET == "a" * 32
+
+
+def test_jwt_secret_override_skips_prod_check():
+    s = Settings(APP_ENV="prod", JWT_SECRET="change-me-in-production", JWT_SECRET_OVERRIDE=True)
+    assert s.APP_ENV == "prod"
+
+
+def test_jwt_secret_allows_default_in_dev():
+    s = Settings(APP_ENV="dev", JWT_SECRET="change-me-in-production")
+    assert s.APP_ENV == "dev"
+
+
+def test_password_hash_and_verify():
+    h = hash_password("s3cret-pass")
+    assert h != "s3cret-pass"
+    assert verify_password("s3cret-pass", h)
+    assert not verify_password("wrong", h)
+
+
+def test_password_verify_rejects_malformed():
+    assert not verify_password("x", "not-a-valid-hash")
+    assert not verify_password("x", "wrongalgo$1000$abc$def")
+
+
+def test_cors_origins_parse_comma_separated():
+    s = Settings(CORS_ORIGINS="http://a.com, http://b.com ,")
+    assert s.CORS_ORIGINS == ["http://a.com", "http://b.com"]
 
 
 def test_jwt_invalid_raises():

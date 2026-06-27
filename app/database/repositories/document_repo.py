@@ -25,13 +25,33 @@ class DocumentRepo:
         await self.db.flush()
         return chunk
 
-    async def vector_search(self, query_embedding: list[float], top_k: int = 5) -> list[DocumentChunk]:
-        result = await self.db.execute(
+    async def vector_search(
+        self,
+        query_embedding: list[float],
+        top_k: int = 5,
+        domain: str | None = None,
+    ) -> list[DocumentChunk]:
+        """向量检索。domain 非空时通过 join documents 表预过滤到指定领域。"""
+        stmt = (
             select(DocumentChunk)
             .where(DocumentChunk.embedding.isnot(None))
             .order_by(DocumentChunk.embedding.cosine_distance(query_embedding))
-            .limit(top_k)
         )
+        if domain is not None:
+            stmt = stmt.join(Document, DocumentChunk.document_id == Document.id).where(Document.domain == domain)
+        stmt = stmt.limit(top_k)
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())
+
+    async def list_chunks_by_domain(self, domain: str, limit: int = 1000) -> list[DocumentChunk]:
+        """BM25 退路用：拉指定领域的所有 chunks 做进程内打分。"""
+        stmt = (
+            select(DocumentChunk)
+            .join(Document, DocumentChunk.document_id == Document.id)
+            .where(Document.domain == domain)
+            .limit(limit)
+        )
+        result = await self.db.execute(stmt)
         return list(result.scalars().all())
 
     async def get(self, document_id: uuid.UUID) -> Document | None:

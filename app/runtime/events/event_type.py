@@ -6,6 +6,7 @@ class SSEEventType(str, Enum):
     PLAN_GENERATED = "plan_generated"
     RETRIEVAL_STARTED = "retrieval_started"
     TOOL_CALLED = "tool_called"
+    TOOL_CONFIRM_REQUIRED = "tool_confirm_required"
     TOOL_RESULT = "tool_result"
     REFLECTION = "reflection"
     FINAL_ANSWER = "final_answer"

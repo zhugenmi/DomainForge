@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-import json
+import time
 
-from app.llm.base import LLMProvider
+from app.configs.settings import settings
+from app.llm.base import LLMProvider, ToolCall
 from app.runtime.events.event_bus import EventBus
 from app.runtime.events.event_type import SSEEventType
 from app.runtime.nodes.base import BaseNode
@@ -19,31 +20,57 @@ class ToolNode(BaseNode):
     async def execute(self, state: AgentState) -> AgentState:
         if state.intent != "tool":
             return state
-        tools = self.tool_registry.get_openai_tools()
-        if not tools:
+
+        # 恢复上次因等待确认而暂挂的 tool_calls；无则向 LLM 申请新的
+        calls: list[ToolCall] = list(state.pending_tool_calls)
+        state.pending_tool_calls = []
+
+        if not calls:
+            tools = self.tool_registry.get_openai_tools()
+            if not tools:
+                return state
+            messages = state.messages + [{"role": "user", "content": state.query}]
+            response = await self.llm.chat_with_tools(
+                messages=messages, tools=tools, tool_choice="auto"
+            )
+            calls = response.tool_calls or []
+
+        if not calls:
             return state
 
-        messages = state.messages + [{"role": "user", "content": state.query}]
-        response = await self.llm.client.chat.completions.create(
-            model=self.llm.model,
-            messages=messages,
-            tools=tools,
-            tool_choice="auto",
-        )
-
-        message = response.choices[0].message
-        if not message.tool_calls:
+        # 暂挂超时检查：上轮挂起的 sensitive 调用若超时仍未确认，标 skipped
+        if state.pending_since and time.time() - state.pending_since > settings.SENSITIVE_TOOL_CONFIRM_TIMEOUT:
+            for tc in calls:
+                state.tool_results.append({"tool": tc.name, "result": {"skipped": True, "reason": "confirm_timeout"}})
+                await self.event_bus.publish(
+                    SSEEventType.TOOL_RESULT, {"tool": tc.name, "result": {"skipped": True, "reason": "confirm_timeout"}}
+                )
             return state
 
-        for tool_call in message.tool_calls:
-            fn_name = tool_call.function.name
-            fn_args = json.loads(tool_call.function.arguments)
-            await self.event_bus.publish(SSEEventType.TOOL_CALLED, {"tool": fn_name, "args": fn_args})
+        for i, tc in enumerate(calls):
+            tool = self.tool_registry.get(tc.name)
+            if tool is None:
+                continue
+            if (
+                tool.permission_scope == "sensitive"
+                and tc.name not in state.confirmed_tool_names
+            ):
+                # 暂挂当前及后续 tool_call，发确认事件，提前返回
+                state.pending_tool_calls = calls[i:]
+                state.pending_since = time.time()
+                await self.event_bus.publish(
+                    SSEEventType.TOOL_CONFIRM_REQUIRED,
+                    {"tool": tc.name, "args": tc.arguments},
+                )
+                return state
 
-            tool = self.tool_registry.get(fn_name)
-            if tool:
-                result = await tool.execute(**fn_args)
-                state.tool_results.append({"tool": fn_name, "result": result})
-                await self.event_bus.publish(SSEEventType.TOOL_RESULT, {"tool": fn_name, "result": result})
+            await self.event_bus.publish(SSEEventType.TOOL_CALLED, {"tool": tc.name, "args": tc.arguments})
+            result = await tool.execute(**tc.arguments)
+            state.tool_results.append({"tool": tc.name, "result": result})
+            await self.event_bus.publish(SSEEventType.TOOL_RESULT, {"tool": tc.name, "result": result})
 
+        state.pending_since = 0.0
         return state
+
+
+__all__ = ["ToolNode"]

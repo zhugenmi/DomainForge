@@ -19,11 +19,15 @@ class RerankService:
     ) -> list[RerankCandidate]:
         if not docs:
             return []
-        if not self.reranker.available():
-            logger.info("rerank_noop", reason="no_rerank_endpoint")
-            candidates = self.reranker.rerank_simple(query, docs, top_n=len(docs))
+        if self.reranker.available():
+            try:
+                candidates = await self.reranker.rerank(query, docs, top_n=len(docs))
+                logger.info("rerank_real", candidates=len(candidates))
+            except Exception as e:
+                logger.warning("rerank_api_failed", error=str(e), fallback="simple")
+                candidates = self.reranker.rerank_simple(query, docs, top_n=len(docs))
         else:
-            # 真实 rerank API 调用留作扩展；当前统一走 simple 路径以避免阻塞
+            logger.info("rerank_noop", reason="no_rerank_endpoint")
             candidates = self.reranker.rerank_simple(query, docs, top_n=len(docs))
         if metadata:
             for c, m in zip(candidates, metadata):
