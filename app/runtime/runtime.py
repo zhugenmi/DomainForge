@@ -40,7 +40,7 @@ class AgentRuntime:
         memory_node = MemoryNode(memory_manager=self.memory_manager)
         retrieval_node = RetrievalNode(rag_service=self.rag_service, event_bus=event_bus)
         tool_node = ToolNode(llm=self.llm, tool_registry=self.tool_registry, event_bus=event_bus)
-        answer_node = AnswerNode(llm=self.llm, event_bus=event_bus)
+        answer_node = AnswerNode(llm=self.llm, event_bus=event_bus, tool_registry=self.tool_registry)
         reflection_node = ReflectionNode(llm=self.llm, event_bus=event_bus)
         return Router(
             nodes=[

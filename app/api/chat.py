@@ -23,6 +23,7 @@ from app.schemas.chat import ChatRequest, ChatResponse
 from app.security.prompt_guard import check_prompt
 from app.tools.builtin.calculator_tool import CalculatorTool
 from app.tools.builtin.file_tool import FileReadTool, FileWriteTool
+from app.tools.builtin.knowledge_catalog_tool import ListKnowledgeBasesTool
 from app.tools.builtin.knowledge_tool import KnowledgeTool
 from app.tools.builtin.search_tool import SearchTool
 from app.tools.registry.registry import registry as tool_registry
@@ -60,7 +61,8 @@ async def _build_runtime(
     rag_service = RAGService(db=db, retriever=retriever, llm=llm, mode="hybrid")
 
     knowledge_tool = KnowledgeTool(rag_service=rag_service)
-    for tool in [knowledge_tool, CalculatorTool(), SearchTool(), FileReadTool(), FileWriteTool()]:
+    catalog_tool = ListKnowledgeBasesTool(db=db)
+    for tool in [knowledge_tool, catalog_tool, CalculatorTool(), SearchTool(), FileReadTool(), FileWriteTool()]:
         if tool_registry.get(tool.name) is None:
             tool_registry.register(tool)
 
