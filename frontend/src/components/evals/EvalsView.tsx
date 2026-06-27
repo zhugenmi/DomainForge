@@ -64,7 +64,7 @@ export default function EvalsView() {
       <PageHeader code="EV" title="评测中心" description="领域评测集 · 指标计算 · Bad Case 分析" />
 
       <div className="relative flex-1 overflow-y-auto">
-        <div className="max-w-5xl mx-auto px-6 py-8 space-y-6">
+        <div className="max-w-7xl mx-auto px-6 py-8 space-y-6">
           {/* 运行评测 */}
           <div className="card p-5">
             <div className="flex items-center gap-2 text-text-muted mb-4">

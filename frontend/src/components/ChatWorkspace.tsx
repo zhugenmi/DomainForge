@@ -283,7 +283,7 @@ export default function ChatWorkspace() {
 
       {/* Messages */}
       <div className="relative flex-1 overflow-y-auto">
-        <div className="max-w-3xl mx-auto px-6 py-8">
+        <div className="max-w-7xl mx-auto px-6 py-8">
           {!hasContent ? (
             <EmptyState />
           ) : (
@@ -300,7 +300,7 @@ export default function ChatWorkspace() {
 
       {/* Input */}
       <div className="relative flex-shrink-0 border-t border-border bg-bg-elevated/80 backdrop-blur-md">
-        <div className="max-w-3xl mx-auto px-6 py-4">
+        <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="relative flex items-end gap-2 p-2 card focus-within:border-accent focus-within:shadow-[0_0_0_3px_var(--accent-glow)] transition-all duration-150">
             <textarea
               ref={inputRef}

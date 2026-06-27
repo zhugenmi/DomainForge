@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { listAgents, deleteAgent, AgentInfo } from "@/lib/api";
+import { useRouter } from "next/navigation";
+import { listAgents, deleteAgent, createSessionWithAgent, AgentInfo } from "@/lib/api";
 import { AgentFormDialog } from "@/components/agents/AgentFormDialog";
 
 interface CategoryInfo {
@@ -53,8 +54,24 @@ export default function AgentsPage() {
     }
   };
 
+  const router = useRouter();
+
+  const handleAccess = async (agent: AgentInfo) => {
+    setError(null);
+    try {
+      const session = await createSessionWithAgent(agent.id);
+      window.dispatchEvent(
+        new CustomEvent("domainforge:session-active", { detail: session.id }),
+      );
+      router.push("/");
+    } catch {
+      setError("创建会话失败");
+    }
+  };
+
   return (
-    <div className="mx-auto max-w-5xl p-6">
+    <div className="flex-1 w-full min-w-0 overflow-y-auto">
+      <div className="mx-auto max-w-7xl p-6">
       <div className="mb-4 flex items-center justify-between">
         <h1 className="text-xl font-semibold">智能体</h1>
         <button
@@ -91,6 +108,12 @@ export default function AgentsPage() {
               <div className="flex gap-2">
                 <button
                   className="text-sm text-[#2563EB]"
+                  onClick={() => handleAccess(agent)}
+                >
+                  访问
+                </button>
+                <button
+                  className="text-sm text-[#2563EB]"
                   onClick={() => {
                     setEditing(agent);
                     setDialogOpen(true);
@@ -120,13 +143,14 @@ export default function AgentsPage() {
           <p className="text-sm text-gray-500">暂无智能体，点击右上角新建。</p>
         )}
       </div>
-      <AgentFormDialog
-        open={dialogOpen}
-        agent={editing}
-        categories={categories}
-        onClose={() => setDialogOpen(false)}
-        onSaved={refresh}
-      />
+        <AgentFormDialog
+          open={dialogOpen}
+          agent={editing}
+          categories={categories}
+          onClose={() => setDialogOpen(false)}
+          onSaved={refresh}
+        />
+      </div>
     </div>
   );
 }

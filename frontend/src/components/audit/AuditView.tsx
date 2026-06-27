@@ -43,7 +43,7 @@ export default function AuditView() {
       />
 
       <div className="relative flex-1 overflow-y-auto">
-        <div className="max-w-5xl mx-auto px-6 py-8">
+        <div className="max-w-7xl mx-auto px-6 py-8">
           <div className="flex items-center gap-2 text-text-muted mb-6">
             <ClipboardList className="w-4 h-4" />
             <span className="text-[13px] font-medium">最近 {entries.length} 条审计记录</span>

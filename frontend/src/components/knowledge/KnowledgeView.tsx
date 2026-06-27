@@ -80,7 +80,7 @@ export default function KnowledgeView() {
       />
 
       <div className="relative flex-1 overflow-y-auto">
-        <div className="max-w-5xl mx-auto px-6 py-8">
+        <div className="max-w-7xl mx-auto px-6 py-8">
           {error && (
             <div className="flex items-center gap-3 px-4 py-3 border border-danger/30 bg-danger-dim rounded-[10px] mb-6">
               <AlertCircle className="w-4 h-4 text-danger" />

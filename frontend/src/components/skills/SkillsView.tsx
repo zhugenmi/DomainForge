@@ -27,7 +27,7 @@ export default function SkillsView() {
       <PageHeader code="SK" title="技能管理" description="工具注册中心 · 内置 Skill 与 MCP 适配" />
 
       <div className="relative flex-1 overflow-y-auto">
-        <div className="max-w-5xl mx-auto px-6 py-8">
+        <div className="max-w-7xl mx-auto px-6 py-8">
           <div className="flex items-center gap-2 text-text-muted mb-6">
             <Boxes className="w-4 h-4" />
             <span className="text-[13px] font-medium">已注册工具 ({tools.length})</span>

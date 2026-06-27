@@ -21,8 +21,8 @@ import { deleteSession, healthCheck, listSessions, type SessionInfo } from "@/li
 type Health = "loading" | "ok" | "error";
 
 const NAV_ITEMS = [
+  { href: "/agents" as const, label: "领域智能体", icon: Bot, code: "AG" },
   { href: "/knowledge" as const, label: "知识库管理", icon: Database, code: "KB" },
-  { href: "/agents" as const, label: "智能体", icon: Bot, code: "AG" },
   { href: "/skills" as const, label: "技能管理", icon: Boxes, code: "SK" },
   { href: "/audit" as const, label: "审计日志", icon: ClipboardList, code: "AD" },
   { href: "/evals" as const, label: "评测中心", icon: Activity, code: "EV" },
