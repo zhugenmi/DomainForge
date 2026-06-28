@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from app.llm.base import LLMProvider
+from app.rag.context.builder import build_context
 from app.runtime.events.event_bus import EventBus
 from app.runtime.events.event_type import SSEEventType
 from app.runtime.nodes.base import BaseNode
@@ -62,8 +63,11 @@ class AnswerNode(BaseNode):
             context_parts.append(f"对话历史：\n{history}")
 
         if state.retrieved_docs:
-            docs = "\n".join(f"- {d['content']}" for d in state.retrieved_docs)
-            context_parts.append(f"检索到的知识：\n{docs}")
+            ctx = build_context(chunks=state.retrieved_docs)
+            context_parts.append(ctx.text)
+            state.citations = [c.__dict__ for c in ctx.citations]
+        else:
+            state.citations = []
 
         if state.tool_results:
             results = "\n".join(self._format_tool_result(r) for r in state.tool_results)
@@ -82,6 +86,13 @@ class AnswerNode(BaseNode):
         else:
             system_prompt = f"{base_prompt}\n\n参考信息：\n{context}"
 
+        if state.retrieved_docs:
+            system_prompt += (
+                "\n\n引用检索知识时，在相关语句末尾标注上标编号，如：根据《民法典》第三条，"
+                "当事人应当……[1]。编号须对应上方检索片段的序号，不得编造编号；"
+                "未引用的检索片段不要标注编号。"
+            )
+
         # 联网搜索已执行：明确指示 LLM 基于结果回答，不要输出函数调用标记
         if any(r.get("tool") == "web_search" for r in state.tool_results):
             system_prompt += (
@@ -97,7 +108,10 @@ class AnswerNode(BaseNode):
         messages = [{"role": "system", "content": system_prompt}] + state.messages + [{"role": "user", "content": state.query}]
         answer = await self.llm.generate(messages=messages)
         state.final_answer = answer
-        await self.event_bus.publish(SSEEventType.FINAL_ANSWER, {"answer": answer})
+        await self.event_bus.publish(
+            SSEEventType.FINAL_ANSWER,
+            {"answer": answer, "citations": state.citations},
+        )
         return state
 
     @staticmethod
