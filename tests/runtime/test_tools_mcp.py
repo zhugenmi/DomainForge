@@ -116,7 +116,7 @@ class _SensitiveTool(Tool):
 
 class _ToolCapableProvider(LLMProvider):
     def __init__(self, tool_calls):
-        self._tool_calls = tool_calls
+        self._tool_calls = list(tool_calls)
 
     async def generate(self, messages, **kwargs):
         return "ok"
@@ -128,7 +128,11 @@ class _ToolCapableProvider(LLMProvider):
         return [[0.0] for _ in texts]
 
     async def chat_with_tools(self, messages, tools, tool_choice="auto", **kwargs):
-        return ToolCallResponse(content="thinking", tool_calls=list(self._tool_calls))
+        # 真实 LLM 拿到工具结果后不再重复发起相同 tool_call；stub 首次返回后清空，
+        # 模拟 ReAct 循环中 LLM 在工具执行后转入 finalize 的行为。
+        calls = self._tool_calls
+        self._tool_calls = []
+        return ToolCallResponse(content="thinking", tool_calls=list(calls))
 
 
 @pytest.mark.asyncio

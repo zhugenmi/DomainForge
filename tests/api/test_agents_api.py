@@ -30,7 +30,7 @@ def app_with_db(monkeypatch):
                 s.add(Category(name=name, is_builtin=True))
             await s.commit()
 
-    asyncio.get_event_loop().run_until_complete(_init())
+    asyncio.run(_init())
     factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
     async def _get_db():
@@ -135,6 +135,6 @@ def test_delete_builtin_agent_returns_403(client, app_with_db):
         agent.is_builtin = True
         await db.commit()
 
-    asyncio.get_event_loop().run_until_complete(_mark_builtin())
+    asyncio.run(_mark_builtin())
     resp = client.delete(f"/api/v1/agents/{aid}")
     assert resp.status_code == 403

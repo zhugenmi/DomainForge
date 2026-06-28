@@ -38,7 +38,7 @@ def client(monkeypatch):
             )
             await s.commit()
 
-    asyncio.get_event_loop().run_until_complete(_init())
+    asyncio.run(_init())
     factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
     async def _get_db():
@@ -50,7 +50,7 @@ def client(monkeypatch):
         __import__("app.database.session", fromlist=["get_db"]).get_db
     ] = _get_db
 
-    captured = {"system": ""}
+    captured: list[str] = []
 
     class _StubLLM:
         model = "stub"
@@ -58,11 +58,11 @@ def client(monkeypatch):
         async def generate(self, messages, **kwargs):
             import sys
             print(f"GENERATE: {messages[0]['content'][:80]}", file=sys.stderr)
-            captured["system"] = messages[0]["content"]
+            captured.append(messages[0]["content"])
             return "stubbed answer"
 
         async def stream(self, messages, **kwargs):
-            captured["system"] = messages[0]["content"]
+            captured.append(messages[0]["content"])
             yield "stubbed"
 
         async def embed(self, texts, **kwargs):
@@ -94,7 +94,8 @@ def test_chat_with_agent_id_injects_system_prompt(client):
     )
     assert resp.status_code == 200, resp.text
     captured = client.app.state._test_captured  # type: ignore[attr-defined]
-    assert "你是法律助手" in captured["system"]
+    # chat 流程会多次调用 LLM（意图识别/生成/质量评估等），任一次调用应注入 agent 的 system_prompt
+    assert any("你是法律助手" in s for s in captured)
 
 
 def test_chat_with_nonexistent_agent_returns_404(client):

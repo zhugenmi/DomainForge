@@ -1,16 +1,17 @@
-"""滑动窗口限流 middleware。
+"""滑动窗口限流 ASGI middleware。
 
 Redis 可用时用 ZSET 实现滑动窗口；不可用时放行（不阻塞业务）。
 key = rl:{identifier}:{route_group}，ZADD 时间戳，ZREMRANGEBYSCORE 清过期，ZCARD 计数。
+
+使用纯 ASGI middleware 而非 BaseHTTPMiddleware：后者会把响应体消费放进
+独立 task，流式响应（StreamingResponse）结束时该 task 被取消，cancel 信号
+会传播进端点的 finally 块，打断 db.commit() 并抛出 CancelledError（BaseException，
+不被 except Exception 捕获），导致助手消息丢失。
 """
 from __future__ import annotations
 
+import json
 import time
-
-from fastapi import Request, Response
-from fastapi.responses import JSONResponse
-from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
-from starlette.types import ASGIApp
 
 from app.observability.logging.logger import get_logger
 from app.services.redis import get_redis
@@ -32,32 +33,43 @@ def _match_group(path: str) -> tuple[str, int, int] | None:
     return None
 
 
-def _client_id(request: Request) -> str:
+def _client_id(scope) -> str:
     # 优先用已认证用户（若有），否则用 IP
-    user = getattr(request.state, "user", None)
+    user = scope.get("user")
     if user and user.get("sub"):
         return f"u:{user['sub']}"
-    fwd = request.headers.get("x-forwarded-for")
+    fwd = None
+    for name, value in scope.get("headers", ()):
+        if name == b"x-forwarded-for":
+            fwd = value.decode("latin-1")
+            break
     if fwd:
         return f"ip:{fwd.split(',')[0].strip()}"
-    return f"ip:{request.client.host if request.client else 'unknown'}"
+    client = scope.get("client")
+    return f"ip:{client[0] if client else 'unknown'}"
 
 
-class RateLimitMiddleware(BaseHTTPMiddleware):
-    def __init__(self, app: ASGIApp):
-        super().__init__(app)
+class RateLimitMiddleware:
+    def __init__(self, app):
+        self.app = app
 
-    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
-        group = _match_group(request.url.path)
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        group = _match_group(scope["path"])
         if group is None:
-            return await call_next(request)
+            await self.app(scope, receive, send)
+            return
 
         prefix, max_req, window = group
         r = await get_redis()
         if r is None:
-            return await call_next(request)  # Redis 不可用，放行
+            await self.app(scope, receive, send)
+            return
 
-        ident = _client_id(request)
+        ident = _client_id(scope)
         key = f"rl:{ident}:{prefix}"
         now = time.time()
         try:
@@ -69,16 +81,20 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             _, _, count, _ = await pipe.execute()
         except Exception as e:
             logger.warning("rate_limit_check_failed", error=str(e))
-            return await call_next(request)  # 限流检查失败，放行
+            await self.app(scope, receive, send)
+            return
 
         if count > max_req:
             logger.info("rate_limited", ident=ident, group=prefix, count=count)
-            return JSONResponse(
-                status_code=429,
-                content={"detail": "请求过于频繁，请稍后再试"},
-                headers={"Retry-After": str(window)},
-            )
-        return await call_next(request)
+            payload = json.dumps({"detail": "请求过于频繁，请稍后再试"}, ensure_ascii=False).encode("utf-8")
+            await send({"type": "http.response.start", "status": 429,
+                        "headers": [(b"content-type", b"application/json"),
+                                    (b"content-length", str(len(payload)).encode()),
+                                    (b"retry-after", str(window).encode())]})
+            await send({"type": "http.response.body", "body": payload})
+            return
+
+        await self.app(scope, receive, send)
 
 
 __all__ = ["RateLimitMiddleware"]

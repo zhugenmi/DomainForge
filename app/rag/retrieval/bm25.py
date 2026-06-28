@@ -145,6 +145,9 @@ class BM25Retriever:
         else:
             result = await self.db.execute(select(DocumentChunk).limit(1000))
             all_chunks = list(result.scalars().all())
+        # 检索结果只读快照，从 session 分离，避免写检索分数时被 dirty tracking 持久化进 DB
+        for c in all_chunks:
+            self.db.expunge(c)
         idx = BM25Index()
         for c in all_chunks:
             idx.add(c.id, c.content)

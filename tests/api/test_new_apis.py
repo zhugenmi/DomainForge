@@ -20,7 +20,7 @@ def app_with_sqlite(monkeypatch):
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
 
-    asyncio.get_event_loop().run_until_complete(_init())
+    asyncio.run(_init())
     factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
     async def _get_db():

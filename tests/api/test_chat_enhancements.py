@@ -29,7 +29,7 @@ def client(monkeypatch):
             s.add(Category(name="legal", is_builtin=True))
             await s.commit()
 
-    asyncio.get_event_loop().run_until_complete(_init())
+    asyncio.run(_init())
     factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
     async def _get_db():
@@ -130,7 +130,7 @@ def test_chat_post_stream_pops_attachments(client, monkeypatch):
     """attachment_ids 应被 pop 为 state.attachments，且 store 中删除。"""
     from app.services.attachment_store import attachment_store
 
-    aid = asyncio.get_event_loop().run_until_complete(
+    aid = asyncio.run(
         attachment_store.put("a.txt", "ATTACH BODY")
     )
 
@@ -155,7 +155,7 @@ def test_chat_post_stream_pops_attachments(client, monkeypatch):
     assert resp.status_code == 200, resp.text
     assert captured["state"].attachments[0]["content"] == "ATTACH BODY"
     # 调用后 store 中应已删除
-    got = asyncio.get_event_loop().run_until_complete(attachment_store.get(aid))
+    got = asyncio.run(attachment_store.get(aid))
     assert got is None
 
 
@@ -180,7 +180,7 @@ def test_chat_post_with_attachments_and_flags(client, monkeypatch):
     """POST /chat（非流式）也应处理新字段。"""
     from app.services.attachment_store import attachment_store
 
-    aid = asyncio.get_event_loop().run_until_complete(
+    aid = asyncio.run(
         attachment_store.put("note.txt", "NOTE TEXT")
     )
 

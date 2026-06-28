@@ -33,9 +33,7 @@ def app_with_sqlite_and_categories(monkeypatch):
                 s.add(Category(name=name, is_builtin=True))
             await s.commit()
 
-    loop = asyncio.new_event_loop()
-    loop.run_until_complete(_init())
-    loop.close()
+    asyncio.run(_init())
     factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
     async def _get_db():

@@ -31,7 +31,7 @@ def _build_app(env: str, *, seed_user: tuple[str, str] | None = None, admin_key:
                 await UserRepo(s).create(username=seed_user[0], role="user", password=seed_user[1])
                 await s.commit()
 
-    asyncio.get_event_loop().run_until_complete(_init())
+    asyncio.run(_init())
     factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
     async def _get_db():
@@ -125,7 +125,7 @@ def test_login_success_audited(prod_app_with_user):
             res = await s.execute(select(AuditLog).where(AuditLog.action == "login_success"))
             return list(res.scalars().all())
 
-    logs = asyncio.get_event_loop().run_until_complete(_read())
+    logs = asyncio.run(_read())
     assert len(logs) == 1
     payload = logs[0].payload
     assert payload["username"] == "alice"
@@ -144,7 +144,7 @@ def test_login_failed_audited(prod_app_with_user):
             res = await s.execute(select(AuditLog).where(AuditLog.action == "login_failed"))
             return list(res.scalars().all())
 
-    logs = asyncio.get_event_loop().run_until_complete(_read())
+    logs = asyncio.run(_read())
     assert len(logs) == 1
     assert logs[0].payload["reason"] == "bad_credentials"
 
@@ -169,6 +169,6 @@ def test_logout_audited(dev_app):
             res = await s.execute(select(AuditLog).where(AuditLog.action == "logout"))
             return list(res.scalars().all())
 
-    logs = asyncio.get_event_loop().run_until_complete(_read())
+    logs = asyncio.run(_read())
     assert len(logs) == 1
     assert logs[0].payload["username"] == "tester"

@@ -17,4 +17,8 @@ class VectorRetriever:
     async def search(self, query: str, top_k: int = 5, domain: str | None = None) -> list[DocumentChunk]:
         embeddings = await self.llm.embed([query])
         query_embedding = embeddings[0]
-        return await self.repo.vector_search(query_embedding, top_k=top_k, domain=domain)
+        chunks = await self.repo.vector_search(query_embedding, top_k=top_k, domain=domain)
+        # 检索结果只读快照，从 session 分离，避免写检索/rerank 分数时被 dirty tracking 持久化进 DB
+        for c in chunks:
+            self.db.expunge(c)
+        return chunks

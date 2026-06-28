@@ -157,6 +157,19 @@ log "starting backend on http://${BACKEND_HOST}:${BACKEND_PORT} ..."
     --host "$BACKEND_HOST" --port "$BACKEND_PORT" ) &
 BACKEND_PID=$!
 
+# Block frontend launch until backend answers /api/v1/health, so Next.js's
+# proxy doesn't hit ECONNREFUSED during the brief window where uvicorn is
+# still binding the port.
+log "waiting for backend health check..."
+for i in $(seq 1 30); do
+  if curl -sf "http://${BACKEND_HOST}:${BACKEND_PORT}/api/v1/health" >/dev/null 2>&1; then
+    log "backend ready."
+    break
+  fi
+  sleep 0.5
+  [ "$i" = "30" ] && err "backend not ready after 15s, starting frontend anyway."
+done
+
 # --- 3. Frontend ------------------------------------------------------------
 log "starting frontend on http://localhost:${FRONTEND_PORT} ..."
 ( cd "$ROOT/frontend" && exec npx next dev --port "$FRONTEND_PORT" ) &

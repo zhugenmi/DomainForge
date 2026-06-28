@@ -28,9 +28,7 @@ def app_with_sqlite(monkeypatch):
             s.add(UserModel(id=uuid.uuid4(), username="default"))
             await s.commit()
 
-    loop = asyncio.new_event_loop()
-    loop.run_until_complete(_init())
-    loop.close()
+    asyncio.run(_init())
     factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
     async def _get_db():
@@ -77,9 +75,7 @@ def test_message_citations_persisted_and_returned(client, app_with_sqlite):
             await s.commit()
             return str(sess.id)
 
-    loop = asyncio.new_event_loop()
-    sid = loop.run_until_complete(_seed())
-    loop.close()
+    sid = asyncio.run(_seed())
 
     r = client.get(f"/api/v1/sessions/{sid}/messages")
     assert r.status_code == 200
