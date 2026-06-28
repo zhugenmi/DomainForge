@@ -7,7 +7,7 @@ from pathlib import Path
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.skills.loader import SkillDescriptor, load_skill_from_dir
+from app.skills.loader import load_skill_from_dir
 from app.skills.manifest import SkillManifest
 from app.skills.marketplace.base import MarketplaceAdapter
 from app.skills.marketplace.models import SkillPackageInfo

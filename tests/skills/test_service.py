@@ -1,10 +1,8 @@
-import json
 from pathlib import Path
 
 import pytest
 
 from app.database.repositories.skill_repo import SkillRepo
-from app.skills.loader import SkillDescriptor
 from app.skills.marketplace.local_adapter import LocalMarketplaceAdapter
 from app.skills.registry import SkillRegistry
 from app.skills.service import SkillService
