@@ -9,3 +9,7 @@ __all__ += ["SkillDescriptor", "load_skill_from_dir"]
 from app.skills.registry import SkillRegistry, skill_registry
 
 __all__ += ["SkillRegistry", "skill_registry"]
+
+from app.skills.injection import build_skill_context_block
+
+__all__ += ["build_skill_context_block"]
