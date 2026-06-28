@@ -187,6 +187,40 @@ async def test_answer_node_populates_state_citations():
 
 
 @pytest.mark.asyncio
+async def test_answer_node_emits_citations_in_final_answer_event():
+    bus = EventBus()
+    llm = _CaptureLLM("ans")
+    node = AnswerNode(llm=llm, event_bus=bus)
+    state = AgentState(query="Q")
+    state.retrieved_docs = [
+        {
+            "id": "c1",
+            "content": "第三条 内容A。",
+            "document_id": "d1",
+            "score": 0.9,
+            "metadata": {"title": "民法典.txt", "article": "第三条"},
+        }
+    ]
+
+    await node.execute(state)
+    bus.done()
+
+    events = []
+    async for line in bus.stream():
+        # line is "data: {json}\n\n"
+        payload_str = line.removeprefix("data: ").strip()
+        import json
+
+        ev = json.loads(payload_str)
+        events.append(ev)
+
+    final_events = [e for e in events if e["event"] == "final_answer"]
+    assert len(final_events) == 1, f"Expected 1 final_answer event, got {len(final_events)}"
+    assert "citations" in final_events[0]["data"]
+    assert final_events[0]["data"]["citations"] == state.citations
+
+
+@pytest.mark.asyncio
 async def test_answer_node_no_citations_when_no_retrieval():
     bus = EventBus()
     llm = _CaptureLLM("ans")
