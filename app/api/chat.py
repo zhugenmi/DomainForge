@@ -29,6 +29,7 @@ from app.runtime.state.agent_state import AgentState
 from app.schemas.chat import AttachmentPreview, AttachmentUploadResponse, ChatModelsResponse, ChatRequest, ChatResponse, CitationOut
 from app.security.prompt_guard import check_prompt
 from app.services.attachment_store import attachment_store
+from app.skills.registry import skill_registry
 from app.tools.builtin.calculator_tool import CalculatorTool
 from app.tools.builtin.file_tool import FileReadTool, FileWriteTool
 from app.tools.builtin.knowledge_catalog_tool import ListKnowledgeBasesTool
@@ -121,6 +122,7 @@ async def _build_runtime(
         memory_manager=memory_service,  # MemoryService 兼容 MemoryManager 接口
         rag_service=rag_service,
         tool_registry=tool_registry,
+        skill_registry=skill_registry,
     )
 
 
