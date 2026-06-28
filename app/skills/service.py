@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import shutil
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -97,7 +97,7 @@ class SkillService:
         desc = load_skill_from_dir(Path(row.installed_path))
         dto = _dto_from_row(row, desc.manifest)
         return InstalledSkillDetailDTO(
-            **{k: getattr(dto, k) for k in dto.__dataclass_fields__},
+            **{f.name: getattr(dto, f.name) for f in fields(dto)},
             body_md=desc.manifest.body_md,
             files=desc.files,
         )

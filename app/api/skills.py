@@ -46,7 +46,6 @@ async def search_marketplace(q: str = ""):
 async def get_marketplace_info(skill_id: str):
     service = await get_skill_service()
     try:
-        from app.skills.marketplace.models import SkillPackageInfo  # noqa
         info = await service.get_marketplace_info(skill_id)
         return vars(info)
     except KeyError:
