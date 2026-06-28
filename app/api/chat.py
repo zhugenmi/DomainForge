@@ -193,7 +193,12 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
         return ChatResponse(session_id=request.session_id, answer=msg, intent="blocked")
 
     await _maybe_cache(request.session_id, request.query, state.intent, state.final_answer)
-    await message_repo.create(session_id=request.session_id, role="assistant", content=state.final_answer)
+    await message_repo.create(
+        session_id=request.session_id,
+        role="assistant",
+        content=state.final_answer,
+        citations=getattr(state, "citations", None),
+    )
     await db.commit()
 
     return ChatResponse(
@@ -270,7 +275,12 @@ async def chat_stream(query: str, session_id: uuid.UUID | None = None, db: Async
         finally:
             answer = state.final_answer or "[生成失败：未获得回复]"
             await _maybe_cache(session_id, query, state.intent, answer)
-            await message_repo.create(session_id=session_id, role="assistant", content=answer)
+            await message_repo.create(
+                session_id=session_id,
+                role="assistant",
+                content=answer,
+                citations=getattr(state, "citations", None),
+            )
             try:
                 await db.commit()
             except Exception:
@@ -348,7 +358,12 @@ async def chat_stream_post(request: ChatRequest, db: AsyncSession = Depends(get_
         finally:
             answer = state.final_answer or "[生成失败：未获得回复]"
             await _maybe_cache(request.session_id, request.query, state.intent, answer)
-            await message_repo.create(session_id=request.session_id, role="assistant", content=answer)
+            await message_repo.create(
+                session_id=request.session_id,
+                role="assistant",
+                content=answer,
+                citations=getattr(state, "citations", None),
+            )
             try:
                 await db.commit()
             except Exception:

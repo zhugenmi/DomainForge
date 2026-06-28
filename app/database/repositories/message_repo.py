@@ -10,8 +10,14 @@ class MessageRepo:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def create(self, session_id: uuid.UUID, role: str, content: str) -> Message:
-        msg = Message(session_id=session_id, role=role, content=content)
+    async def create(
+        self,
+        session_id: uuid.UUID,
+        role: str,
+        content: str,
+        citations: list[dict] | None = None,
+    ) -> Message:
+        msg = Message(session_id=session_id, role=role, content=content, citations=citations)
         self.db.add(msg)
         await self.db.flush()
         return msg
