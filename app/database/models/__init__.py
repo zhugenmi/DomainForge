@@ -4,6 +4,7 @@ from app.database.models.category import Category
 from app.database.models.chunk import DocumentChunk
 from app.database.models.document import Document
 from app.database.models.eval_result import EvalResult
+from app.database.models.installed_skill import InstalledSkill
 from app.database.models.memory import Memory
 from app.database.models.message import Message
 from app.database.models.session import Session
@@ -20,4 +21,5 @@ __all__ = [
     "EvalResult",
     "Category",
     "Agent",
+    "InstalledSkill",
 ]

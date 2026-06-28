@@ -42,6 +42,7 @@ class ChatResponse(BaseModel):
 class CitationOut(BaseModel):
     index: int
     title: str
+    chapter: str = ""
     locator: str
     snippet: str
     document_id: str

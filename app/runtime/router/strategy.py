@@ -88,7 +88,8 @@ class ConditionalStrategy:
         if name == "websearch":
             return state.web_search
         if name == "tool":
-            return state.intent == "tool" or _plan_needs(state, "tool")
+            # ReAct 循环：总是跑，LLM 自己决定调不调工具
+            return True
         if name == "reasoning":
             return state.deep_think
         return True

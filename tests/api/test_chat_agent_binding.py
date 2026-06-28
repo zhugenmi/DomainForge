@@ -56,6 +56,8 @@ def client(monkeypatch):
         model = "stub"
 
         async def generate(self, messages, **kwargs):
+            import sys
+            print(f"GENERATE: {messages[0]['content'][:80]}", file=sys.stderr)
             captured["system"] = messages[0]["content"]
             return "stubbed answer"
 

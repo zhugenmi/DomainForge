@@ -123,7 +123,7 @@ export default function Sidebar({
               <span className="text-[13px] font-semibold text-text leading-none tracking-tight">
                 DomainForge
               </span>
-              <span className="text-[10px] text-text-muted mt-1">领域智能体控制台</span>
+              <span className="text-[10px] text-text-muted mt-1">领域智能体与知识服务平台</span>
             </div>
           )}
         </div>

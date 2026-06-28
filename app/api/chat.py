@@ -29,11 +29,14 @@ from app.runtime.state.agent_state import AgentState
 from app.schemas.chat import AttachmentPreview, AttachmentUploadResponse, ChatModelsResponse, ChatRequest, ChatResponse, CitationOut
 from app.security.prompt_guard import check_prompt
 from app.services.attachment_store import attachment_store
+from app.skills.registry import skill_registry
 from app.tools.builtin.calculator_tool import CalculatorTool
 from app.tools.builtin.file_tool import FileReadTool, FileWriteTool
 from app.tools.builtin.knowledge_catalog_tool import ListKnowledgeBasesTool
 from app.tools.builtin.knowledge_tool import KnowledgeTool
 from app.tools.builtin.search_tool import SearchTool
+from app.tools.builtin.time_tool import CurrentTimeTool
+from app.tools.builtin.weather_tool import WeatherTool
 from app.tools.registry.registry import registry as tool_registry
 from app.services.cache import cache_get, cache_set
 
@@ -112,7 +115,7 @@ async def _build_runtime(
 
     knowledge_tool = KnowledgeTool(rag_service=rag_service)
     catalog_tool = ListKnowledgeBasesTool(db=db)
-    for tool in [knowledge_tool, catalog_tool, CalculatorTool(), SearchTool(), FileReadTool(), FileWriteTool()]:
+    for tool in [knowledge_tool, catalog_tool, CalculatorTool(), SearchTool(), WeatherTool(), CurrentTimeTool(), FileReadTool(), FileWriteTool()]:
         if tool_registry.get(tool.name) is None:
             tool_registry.register(tool)
 
@@ -121,6 +124,7 @@ async def _build_runtime(
         memory_manager=memory_service,  # MemoryService 兼容 MemoryManager 接口
         rag_service=rag_service,
         tool_registry=tool_registry,
+        skill_registry=skill_registry,
     )
 
 

@@ -29,12 +29,14 @@ class AgentRuntime:
         rag_service: RAGService,
         tool_registry: ToolRegistry,
         max_iterations: int = 8,
+        skill_registry=None,
     ):
         self.llm = llm
         self.memory_manager = memory_manager
         self.rag_service = rag_service
         self.tool_registry = tool_registry
         self.max_iterations = max_iterations
+        self.skill_registry = skill_registry
 
     def _build_router(self, event_bus: EventBus) -> Router:
         intent_node = IntentNode(llm=self.llm, event_bus=event_bus)
@@ -44,7 +46,12 @@ class AgentRuntime:
         web_search_node = WebSearchNode(llm=self.llm, tool_registry=self.tool_registry, event_bus=event_bus)
         tool_node = ToolNode(llm=self.llm, tool_registry=self.tool_registry, event_bus=event_bus)
         reasoning_node = ReasoningNode(llm=self.llm, event_bus=event_bus)
-        answer_node = AnswerNode(llm=self.llm, event_bus=event_bus, tool_registry=self.tool_registry)
+        answer_node = AnswerNode(
+            llm=self.llm,
+            event_bus=event_bus,
+            tool_registry=self.tool_registry,
+            skill_registry=self.skill_registry,
+        )
         reflection_node = ReflectionNode(llm=self.llm, event_bus=event_bus)
         return Router(
             nodes=[

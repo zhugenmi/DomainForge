@@ -59,6 +59,32 @@ def test_legal_chunker_by_article():
     assert chunks[1].metadata["article"] == "第二条"
 
 
+def test_legal_chunker_tracks_chapter_full_name():
+    """章节标题在条文之前时，每个条文的 metadata.chapter 带上完整章名。"""
+    text = (
+        "第一章　总则\n"
+        "第一条　立法目的。\n内容A。\n"
+        "第二条　适用范围。\n内容B。\n"
+        "第二章　劳动合同和集体合同\n"
+        "第三十六条　国家实行劳动者每日工作时间不超过八小时的工时制度。\n"
+    )
+    chunks = chunk_legal(text)
+    assert len(chunks) == 3
+    assert chunks[0].metadata["chapter"] == "第一章　总则"
+    assert chunks[0].metadata["article"] == "第一条"
+    assert chunks[1].metadata["chapter"] == "第一章　总则"
+    assert chunks[2].metadata["chapter"] == "第二章　劳动合同和集体合同"
+    assert chunks[2].metadata["article"] == "第三十六条"
+
+
+def test_legal_chunker_no_chapter_omits_chapter_key():
+    """无"第X章"时不写 chapter 键，保持与旧契约兼容。"""
+    text = "第一条 立法目的。\n第二条 适用范围。"
+    chunks = chunk_legal(text)
+    assert len(chunks) == 2
+    assert "chapter" not in chunks[0].metadata
+
+
 def test_finance_chunker_by_heading():
     text = "1.1 产品说明\n详细内容。\n1.2 风险提示\n风险说明。"
     chunks = chunk_finance(text)

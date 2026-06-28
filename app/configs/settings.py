@@ -28,6 +28,11 @@ class Settings(BaseSettings):
     EMBEDDING_BATCH_SIZE: int = 10  # DashScope 等厂商限制单批 ≤10
     EMBEDDING_BATCH_INTERVAL: float = 0.2  # 批次间节流（秒），规避账户级 RPM 限制
 
+    # Rerank
+    RERANK_BASE_URL: str = ""
+    RERANK_API_KEY: str = ""
+    RERANK_MODEL: str = "bge-reranker-base"
+
     # Database
     DATABASE_URL: str = "postgresql+asyncpg://domainforge:domainforge@localhost:5432/domainforge"
 
@@ -74,6 +79,10 @@ class Settings(BaseSettings):
     CHAT_ATTACHMENT_TTL: int = 600       # 聊天附件 store TTL（秒）
     MAX_CHAT_ATTACHMENTS: int = 5        # 单次聊天附件数上限
     MAX_CHAT_ATTACHMENT_MB: int = 20     # 单文件大小上限（MB）
+
+    # Skills
+    SKILLS_INSTALLED_ROOT: str = "skills/installed"
+    SKILLS_MARKETPLACE_ROOT: str = "skills/marketplace"
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 

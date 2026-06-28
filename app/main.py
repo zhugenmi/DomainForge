@@ -1,16 +1,21 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import asyncio
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import admin, agents, audit, chat, evals, health, knowledge, sessions
+from app.api import admin, agents, audit, chat, evals, health, knowledge, sessions, skills
 from app.api.middleware.rate_limit import RateLimitMiddleware
 from app.configs.settings import settings
+from app.database.repositories.skill_repo import SkillRepo
+from app.database.session import async_session_factory
 from app.observability.logging.logger import get_logger, setup_logging
 from app.security.auth import router as auth_router
 from app.services.preview_store import run_periodic_sweep
 from app.services.redis import close_redis, get_redis
+from app.skills.loader import load_skill_from_dir
+from app.skills.registry import skill_registry
 from app.tools.mcp.adapter import register_mcp_tools
 from app.tools.mcp.client import MCPClient
 from app.tools.registry.registry import registry as tool_registry
@@ -20,7 +25,7 @@ logger = get_logger("main")
 
 def _check_secrets() -> None:
     """启动时检查关键密钥是否仍为默认/空值。dev 模式仅 warning，prod 模式已有 validator 兜底。"""
-    for key in ("JWT_SECRET", "ADMIN_API_KEY", "LLM_API_KEY"):
+    for key in ("JWT_SECRET", "LLM_API_KEY"):
         if settings.is_secret_default(key):
             logger.warning("secret_default", key=key, env=settings.APP_ENV, msg=f"{key} 仍为默认/空值，生产前必须替换")
 
@@ -33,6 +38,22 @@ async def _register_mcp_tools() -> None:
     await register_mcp_tools(tool_registry, client)
 
 
+async def _load_installed_skills() -> None:
+    """启动时从 DB 重建 SkillRegistry：加载所有 enabled=True 的已安装 skill。失败不阻塞。"""
+    try:
+        async with async_session_factory() as db:
+            rows = await SkillRepo(db).list_enabled()
+    except Exception as e:
+        logger.warning("skill_load_failed", error=str(e))
+        return
+    for row in rows:
+        try:
+            desc = load_skill_from_dir(Path(row.installed_path))
+            skill_registry.add(desc)
+        except Exception as e:
+            logger.warning("skill_load_one_failed", name=row.name, error=str(e))
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     setup_logging()
@@ -41,6 +62,8 @@ async def lifespan(app: FastAPI):
     await get_redis()
     # 拉取 MCP 远端工具（未配置或失败时跳过）
     await _register_mcp_tools()
+    # 从 DB 重建已安装 skill registry
+    await _load_installed_skills()
     sweep_task = asyncio.create_task(run_periodic_sweep(interval=60))
     yield
     # 优雅关机：取消后台清扫，关闭 Redis 连接
@@ -83,4 +106,5 @@ app.include_router(sessions.router, prefix="/api/v1")
 app.include_router(audit.router, prefix="/api/v1")
 app.include_router(evals.router, prefix="/api/v1")
 app.include_router(admin.router, prefix="/api/v1")
+app.include_router(skills.router, prefix="/api/v1")
 app.include_router(auth_router, prefix="/api/v1")

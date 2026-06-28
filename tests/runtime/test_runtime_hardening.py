@@ -22,12 +22,16 @@ from app.tools.base import Tool
 # ---------- 3.1 chat_with_tools 抽象 ----------
 
 class _ToolCapableProvider(LLMProvider):
-    """模拟支持 function-calling 的 provider。"""
+    """模拟支持 function-calling 的 provider。
+
+    首次 chat_with_tools 返回构造时传入的 tool_calls；后续轮次返回空（终止 ReAct 循环）。
+    """
 
     def __init__(self, tool_calls: list[ToolCall] | None = None, raise_on_call: bool = False):
         self.model = "stub-tools"
         self._tool_calls = tool_calls or []
         self._raise = raise_on_call
+        self._called = False
 
     async def generate(self, messages, **kwargs):
         return "ok"
@@ -41,6 +45,9 @@ class _ToolCapableProvider(LLMProvider):
     async def chat_with_tools(self, messages, tools, tool_choice="auto", **kwargs):
         if self._raise:
             raise RuntimeError("provider down")
+        if self._called:
+            return ToolCallResponse(content="done", tool_calls=[])
+        self._called = True
         return ToolCallResponse(content="thinking", tool_calls=list(self._tool_calls))
 
 
@@ -247,6 +254,10 @@ async def test_parallel_retrieval_and_tool():
 
 @pytest.mark.asyncio
 async def test_serial_when_only_retrieval():
+    """方案 B：ToolNode 总是跑（ReAct 循环），intent=knowledge 也不再跳过 tool。
+
+    retrieval 仍按 intent/plan 触发；tool 节点改为无条件执行，由 LLM 自主决定是否调工具。
+    """
     retrieval = _DelayNode("retrieved_docs", 0.01)
     tool = _DelayNode("tool_results", 0.01)
     answer = _AnswerNode()
@@ -259,8 +270,8 @@ async def test_serial_when_only_retrieval():
     state = AgentState(query="q")
     state = await strategy.run(state)
     assert state.retrieved_docs == [{"done": True}]
-    # intent=knowledge 且 plan 无 tool → tool 节点不执行
-    assert tool.started_at is None
+    # tool 节点现在总是执行
+    assert tool.started_at is not None
 
 
 class _AnswerNode(BaseNode):

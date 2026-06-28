@@ -66,11 +66,11 @@ class HybridRetriever:
 
         out: list[DocumentChunk] = []
         for cand in reranked:
-            for c in candidates:
-                if c.content == cand.text:
-                    c.score = cand.score
-                    out.append(c)
-                    break
+            if cand.index is None or not (0 <= cand.index < len(candidates)):
+                continue
+            c = candidates[cand.index]
+            c.score = cand.score
+            out.append(c)
         return out[:top_k]
 
 

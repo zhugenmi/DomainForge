@@ -66,6 +66,7 @@ export interface SessionInfo {
 export interface Citation {
   index: number;
   title: string;
+  chapter?: string;
   locator: string;
   snippet: string;
   document_id: string;
@@ -109,6 +110,70 @@ export interface ToolInfo {
     required: boolean;
     default?: unknown;
   }>;
+}
+
+export interface InstalledSkill {
+  name: string;
+  description: string;
+  version: string;
+  author: string;
+  license: string;
+  source: string;
+  enabled: boolean;
+  installed_at: string;
+}
+
+export interface SkillDetail extends InstalledSkill {
+  body_md: string;
+  files: string[];
+}
+
+export interface SkillPackageInfo {
+  skill_id: string;
+  name: string;
+  description: string;
+  version: string;
+  author: string;
+  license: string;
+  source: string;
+  body_preview: string;
+}
+
+export async function listInstalledSkills(): Promise<InstalledSkill[]> {
+  return getJSON(`${API_BASE}/skills/installed`);
+}
+
+export async function getInstalledSkill(name: string): Promise<SkillDetail> {
+  return getJSON(`${API_BASE}/skills/installed/${encodeURIComponent(name)}`);
+}
+
+export async function uninstallSkill(name: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/skills/installed/${encodeURIComponent(name)}`, {
+    method: "DELETE",
+  });
+  if (!res.ok && res.status !== 204) throw new Error(`uninstall failed: ${res.status}`);
+}
+
+export async function setSkillEnabled(name: string, enabled: boolean): Promise<InstalledSkill> {
+  return getJSON(`${API_BASE}/skills/installed/${encodeURIComponent(name)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ enabled }),
+  });
+}
+
+export async function searchMarketplace(q: string): Promise<SkillPackageInfo[]> {
+  return getJSON(`${API_BASE}/skills/marketplace?q=${encodeURIComponent(q)}`);
+}
+
+export async function getMarketplaceSkill(id: string): Promise<SkillPackageInfo> {
+  return getJSON(`${API_BASE}/skills/marketplace/${encodeURIComponent(id)}`);
+}
+
+export async function installSkill(id: string): Promise<InstalledSkill> {
+  return getJSON(`${API_BASE}/skills/marketplace/${encodeURIComponent(id)}/install`, {
+    method: "POST",
+  });
 }
 
 export interface MetricsSnapshot {

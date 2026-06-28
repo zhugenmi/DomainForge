@@ -9,6 +9,8 @@ from app.runtime.events.event_bus import EventBus
 from app.runtime.events.event_type import SSEEventType
 from app.runtime.nodes.base import BaseNode
 from app.runtime.state.agent_state import AgentState
+from app.skills.injection import build_skill_context_block
+from app.skills.registry import SkillRegistry
 from app.tools.registry.registry import ToolRegistry
 
 ANSWER_SYSTEM_PROMPT = """你是一个专业的领域助手。请根据以下信息回答用户问题。
@@ -17,10 +19,17 @@ ANSWER_SYSTEM_PROMPT = """你是一个专业的领域助手。请根据以下信
 
 
 class AnswerNode(BaseNode):
-    def __init__(self, llm: LLMProvider, event_bus: EventBus, tool_registry: ToolRegistry | None = None):
+    def __init__(
+        self,
+        llm: LLMProvider,
+        event_bus: EventBus,
+        tool_registry: ToolRegistry | None = None,
+        skill_registry: SkillRegistry | None = None,
+    ):
         self.llm = llm
         self.event_bus = event_bus
         self.tool_registry = tool_registry
+        self.skill_registry = skill_registry
 
     async def _build_capability_context(self) -> str:
         """组装系统能力上下文：可用知识库目录 + 可用工具清单。
@@ -55,6 +64,8 @@ class AnswerNode(BaseNode):
         return "\n\n".join(parts)
 
     async def execute(self, state: AgentState) -> AgentState:
+        if state.answered_by_tool:
+            return state
         context_parts = []
 
         capability = await self._build_capability_context()
@@ -107,6 +118,11 @@ class AnswerNode(BaseNode):
 
         if state.reasoning:
             system_prompt += f"\n\n你的思考过程：\n{state.reasoning}\n请基于上述思考给出最终答案。"
+
+        if self.skill_registry is not None:
+            skill_block = build_skill_context_block(self.skill_registry)
+            if skill_block:
+                system_prompt += f"\n\n{skill_block}"
 
         messages = [{"role": "system", "content": system_prompt}] + state.messages + [{"role": "user", "content": state.query}]
         answer = await self.llm.generate(messages=messages)

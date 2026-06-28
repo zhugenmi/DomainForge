@@ -559,10 +559,12 @@ function CitationList({ citations, msgId }: { citations: Citation[]; msgId: stri
     <ol className="citations mt-3 pt-2 border-t border-border space-y-1.5">
       {citations.map((c) => (
         <li key={c.index} id={`cite-${msgId}-${c.index}`} className="text-[11px] text-text-dim leading-relaxed">
-          <span className="text-text-faint font-mono mr-1">[{c.index}]</span>
-          <span className="text-text font-medium">{c.title}</span>
-          <span className="text-text-faint mx-1">·</span>
-          <span className="text-accent">{c.locator}</span>
+          <div>
+            <span className="text-text-faint font-mono mr-1">[{c.index}]</span>
+            <span className="text-text font-medium">{c.title}</span>
+            {c.chapter && <span className="text-text-faint"> · <span className="text-accent">{c.chapter}</span></span>}
+            {c.locator && <span className="text-text-faint"> · <span className="text-accent">{c.locator}</span></span>}
+          </div>
           <div className="text-text-muted line-clamp-2 mt-0.5">{c.snippet}</div>
         </li>
       ))}
