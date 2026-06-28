@@ -30,8 +30,10 @@ class RetrievalNode(BaseNode):
             return state
         state.retrieved_docs = [
             {
+                "id": str(chunk.id),
                 "content": chunk.content,
                 "document_id": str(chunk.document_id),
+                "score": float(chunk.score) if chunk.score is not None else 0.0,
                 "metadata": chunk.metadata_,
             }
             for chunk in chunks
