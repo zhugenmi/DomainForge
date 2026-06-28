@@ -33,7 +33,9 @@ def app_with_sqlite_and_categories(monkeypatch):
                 s.add(Category(name=name, is_builtin=True))
             await s.commit()
 
-    asyncio.get_event_loop().run_until_complete(_init())
+    loop = asyncio.new_event_loop()
+    loop.run_until_complete(_init())
+    loop.close()
     factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
     async def _get_db():
@@ -44,6 +46,15 @@ def app_with_sqlite_and_categories(monkeypatch):
     app.dependency_overrides[
         __import__("app.database.session", fromlist=["get_db"]).get_db
     ] = _get_db
+
+    # 后台导入任务使用独立 session factory（不走 get_db 依赖注入），
+    # 这里把 knowledge 模块引用的 factory 指向测试 sqlite factory
+    import app.api.knowledge as knowledge_mod
+    monkeypatch.setattr(knowledge_mod, "async_session_factory", factory)
+
+    # 清空 import job store，避免跨测试残留
+    from app.services.import_job_store import import_job_store
+    import_job_store._jobs.clear()
 
     # mock LLM provider
     class _StubLLM:
@@ -60,7 +71,11 @@ def app_with_sqlite_and_categories(monkeypatch):
             return [[0.0] * 1024 for _ in texts]
 
     import app.llm.providers.openai as openai_mod
+    import app.api.knowledge as knowledge_mod
     monkeypatch.setattr(openai_mod, "OpenAIProvider", lambda *a, **k: _StubLLM())
+    # confirm_import / _run_import 通过 knowledge 模块内的名字引用 OpenAIProvider，
+    # 必须同步 patch 该绑定，否则后台任务会用真实 provider 打外部 API。
+    monkeypatch.setattr(knowledge_mod, "OpenAIProvider", lambda *a, **k: _StubLLM())
 
     yield app
     app.dependency_overrides.clear()
@@ -141,37 +156,68 @@ def test_upload_rejects_unknown_category(client):
     assert r.status_code == 404
 
 
-def test_confirm_import_persists_documents_and_chunks(client):
-    # 1. upload
-    content = "第一条 内容A。\n第二条 内容B。"
-    up = client.post(
-        "/api/v1/knowledge/upload",
-        data={"domain": "legal", "chunk_strategy": "legal"},
-        files=[("files", ("doc.txt", content.encode("utf-8"), "text/plain"))],
-    )
-    assert up.status_code == 200
-    session_id = up.json()["session_id"]
+async def _wait_for_job(app, job_id: str, timeout: float = 5.0) -> dict:
+    """异步轮询导入 job。与后台任务共享事件循环，asyncio.sleep 让出控制权使其推进。"""
+    import asyncio
+    import time
 
-    # 2. confirm
-    cf = client.post("/api/v1/knowledge/confirm", json={"session_id": session_id})
-    assert cf.status_code == 200, cf.text
-    result = cf.json()
+    import httpx
+
+    deadline = time.time() + timeout
+    last = None
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
+        while time.time() < deadline:
+            r = await ac.get(f"/api/v1/knowledge/import/{job_id}/status")
+            assert r.status_code == 200, r.text
+            last = r.json()
+            if last["status"] in ("succeeded", "failed"):
+                return last
+            await asyncio.sleep(0.02)
+    raise AssertionError(f"job {job_id} did not finish, last status: {last}")
+
+
+async def test_confirm_import_persists_documents_and_chunks(app_with_sqlite_and_categories):
+    app = app_with_sqlite_and_categories
+    import httpx
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
+        # 1. upload
+        content = "第一条 内容A。\n第二条 内容B。"
+        up = await ac.post(
+            "/api/v1/knowledge/upload",
+            data={"domain": "legal", "chunk_strategy": "legal"},
+            files=[("files", ("doc.txt", content.encode("utf-8"), "text/plain"))],
+        )
+        assert up.status_code == 200
+        session_id = up.json()["session_id"]
+
+        # 2. confirm 立即返回 202 + job_id
+        cf = await ac.post("/api/v1/knowledge/confirm", json={"session_id": session_id})
+        assert cf.status_code == 202, cf.text
+        job_id = cf.json()["job_id"]
+
+    # 3. 轮询直到完成（独立 client，确保后台任务在循环上推进）
+    result = await _wait_for_job(app, job_id)
+    assert result["status"] == "succeeded", result
     assert len(result["document_ids"]) == 1
     assert result["total_chunks"] >= 1
+    assert result["processed_chunks"] == result["total_chunks"]
 
-    # 3. 列出类别统计应反映新增
-    cats = client.get("/api/v1/knowledge/categories").json()
-    legal = next(c for c in cats if c["name"] == "legal")
-    assert legal["file_count"] == 1
-    assert legal["word_count"] > 0
+    # 4. 列出类别统计应反映新增
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
+        cats = (await ac.get("/api/v1/knowledge/categories")).json()
+        legal = next(c for c in cats if c["name"] == "legal")
+        assert legal["file_count"] == 1
+        assert legal["word_count"] > 0
 
-    # 4. 列出文档
-    docs = client.get("/api/v1/knowledge/categories/legal/documents").json()
-    assert len(docs) == 1
-    assert docs[0]["title"] == "doc.txt"
-    assert docs[0]["file_type"] == "txt"
-    assert docs[0]["status"] == "indexed"
-    assert docs[0]["chunk_count"] >= 1
+        docs = (await ac.get("/api/v1/knowledge/categories/legal/documents")).json()
+        assert len(docs) == 1
+        assert docs[0]["title"] == "doc.txt"
+        assert docs[0]["file_type"] == "txt"
+        assert docs[0]["status"] == "indexed"
+        assert docs[0]["chunk_count"] >= 1
 
 
 def test_confirm_expired_session_returns_410(client):
@@ -182,30 +228,80 @@ def test_confirm_expired_session_returns_410(client):
     assert r.status_code == 410
 
 
-def test_delete_document_cascades_chunks(client):
-    # import 一个文档
-    up = client.post(
-        "/api/v1/knowledge/upload",
-        data={"domain": "legal", "chunk_strategy": "legal"},
-        files=[("files", ("to_del.txt", "第一条 X。\n第二条 Y。".encode("utf-8"), "text/plain"))],
-    )
-    sid = up.json()["session_id"]
-    cf = client.post("/api/v1/knowledge/confirm", json={"session_id": sid})
-    doc_id = cf.json()["document_ids"][0]
+async def test_confirm_import_marks_failed_on_embed_error(app_with_sqlite_and_categories, monkeypatch):
+    """embed 抛错时 job 应转 failed，文档标 failed，不卡 parsing。"""
+    app = app_with_sqlite_and_categories
+    import httpx
 
-    # delete
-    r = client.delete(f"/api/v1/knowledge/documents/{doc_id}")
-    assert r.status_code == 200
-    assert r.json()["deleted"] == doc_id
+    # 让 _run_import 内的 OpenAIProvider 返回一个 embed 必失败的 stub
+    class _BoomLLM:
+        model = "boom"
 
-    # 再删一次 404
-    r2 = client.delete(f"/api/v1/knowledge/documents/{doc_id}")
-    assert r2.status_code == 404
+        async def generate(self, messages, **kwargs):
+            return ""
 
-    # 类别统计应回到 0
-    cats = client.get("/api/v1/knowledge/categories").json()
-    legal = next(c for c in cats if c["name"] == "legal")
-    assert legal["file_count"] == 0
+        async def stream(self, messages, **kwargs):
+            yield ""
+
+        async def embed(self, texts, **kwargs):
+            raise RuntimeError("embed boom")
+
+    import app.api.knowledge as knowledge_mod
+    monkeypatch.setattr(knowledge_mod, "OpenAIProvider", lambda *a, **k: _BoomLLM())
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
+        up = await ac.post(
+            "/api/v1/knowledge/upload",
+            data={"domain": "legal", "chunk_strategy": "legal"},
+            files=[("files", ("boom.txt", "第一条 A。".encode("utf-8"), "text/plain"))],
+        )
+        sid = up.json()["session_id"]
+        cf = await ac.post("/api/v1/knowledge/confirm", json={"session_id": sid})
+        assert cf.status_code == 202
+
+    result = await _wait_for_job(app, cf.json()["job_id"])
+    assert result["status"] == "failed"
+    assert "embed boom" in (result["error"] or "")
+
+    # 失败回滚 → 无孤儿文档
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
+        docs = (await ac.get("/api/v1/knowledge/categories/legal/documents")).json()
+        assert docs == []
+
+
+async def test_delete_document_cascades_chunks(app_with_sqlite_and_categories):
+    app = app_with_sqlite_and_categories
+    import httpx
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
+        up = await ac.post(
+            "/api/v1/knowledge/upload",
+            data={"domain": "legal", "chunk_strategy": "legal"},
+            files=[("files", ("to_del.txt", "第一条 X。\n第二条 Y。".encode("utf-8"), "text/plain"))],
+        )
+        sid = up.json()["session_id"]
+        cf = await ac.post("/api/v1/knowledge/confirm", json={"session_id": sid})
+        assert cf.status_code == 202
+    result = await _wait_for_job(app, cf.json()["job_id"])
+    assert result["status"] == "succeeded"
+    doc_id = result["document_ids"][0]
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
+        # delete
+        r = await ac.delete(f"/api/v1/knowledge/documents/{doc_id}")
+        assert r.status_code == 200
+        assert r.json()["deleted"] == doc_id
+
+        # 再删一次 404
+        r2 = await ac.delete(f"/api/v1/knowledge/documents/{doc_id}")
+        assert r2.status_code == 404
+
+        # 类别统计应回到 0
+        cats = (await ac.get("/api/v1/knowledge/categories")).json()
+        legal = next(c for c in cats if c["name"] == "legal")
+        assert legal["file_count"] == 0
 
 
 def test_legacy_index_endpoint_still_works(client):

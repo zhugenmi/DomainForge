@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     EMBEDDING_MODEL: str = "text-embedding-3-small"
     EMBEDDING_API_KEY: str = ""
     EMBEDDING_BATCH_SIZE: int = 10  # DashScope 等厂商限制单批 ≤10
+    EMBEDDING_BATCH_INTERVAL: float = 0.2  # 批次间节流（秒），规避账户级 RPM 限制
 
     # Database
     DATABASE_URL: str = "postgresql+asyncpg://domainforge:domainforge@localhost:5432/domainforge"

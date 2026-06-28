@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import logging
 import uuid
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
@@ -9,7 +11,7 @@ from app.configs.settings import settings
 from app.database.models.document import Document
 from app.database.repositories.category_repo import CategoryRepo
 from app.database.repositories.document_repo import DocumentRepo
-from app.database.session import get_db
+from app.database.session import async_session_factory, get_db
 from app.llm.embedding.embedding_service import EmbeddingService
 from app.llm.providers.openai import OpenAIProvider
 from app.rag.chunk.finance_chunker import chunk_finance
@@ -29,10 +31,14 @@ from app.schemas.knowledge import (
     DocumentInfo,
     DocumentUpload,
     FilePreview,
+    ImportJobStatus,
     PreviewSession,
     SearchResponse,
 )
+from app.services.import_job_store import import_job_store
 from app.services.preview_store import preview_store
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/knowledge", tags=["knowledge"])
 
@@ -196,61 +202,119 @@ async def upload_files(
     )
 
 
-@router.post("/confirm", response_model=ConfirmResponse)
-async def confirm_import(req: ConfirmRequest, db: AsyncSession = Depends(get_db)):
-    """Phase 2: 用户确认后，对 preview session 执行 embed + 持久化。"""
+@router.post("/confirm", response_model=ConfirmResponse, status_code=202)
+async def confirm_import(req: ConfirmRequest):
+    """Phase 2: 用户确认后，排队执行 embed + 持久化。
+    立即返回 job_id，前端轮询 GET /knowledge/import/{job_id}/status。
+    同步校验 preview session 有效性，失败立即 410。
+    """
     data = await preview_store.get(req.session_id)
     if data is None:
         raise HTTPException(status_code=410, detail="preview session expired or not found")
 
+    total_files = len(data["files"])
+    total_chunks = sum(len(p["chunks"]) for p in data["files"])
+    job = await import_job_store.create(total_files=total_files, total_chunks=total_chunks)
+
+    # 占用 session 数据副本，避免后台任务读到被 remove 的状态
+    payload = {
+        "domain": data["domain"],
+        "chunk_strategy": data["chunk_strategy"],
+        "files": data["files"],
+    }
+    asyncio.create_task(_run_import(job.job_id, req.session_id, payload))
+    return ConfirmResponse(job_id=job.job_id, status="pending")
+
+
+async def _run_import(job_id: uuid.UUID, session_id: uuid.UUID, data: dict) -> None:
+    """后台执行 embed + 持久化。使用独立 DB session，逐文件更新进度。"""
+    await import_job_store.update(job_id, status="running")
     llm = OpenAIProvider()
     embedder = EmbeddingService(llm=llm)
-    repo = DocumentRepo(db)
-
     document_ids: list[uuid.UUID] = []
-    total_chunks = 0
-    for p in data["files"]:
-        doc = Document(
-            domain=data["domain"],
-            title=p["filename"],
-            source=p["filename"],
-            file_type=p["file_type"],
-            file_size_bytes=p["file_size_bytes"],
-            word_count=p["word_count"],
-            chunk_count=len(p["chunks"]),
-            status="parsing",
-        )
-        db.add(doc)
-        await db.flush()
-        document_ids.append(doc.id)
+    processed_chunks = 0
 
-        chunks = p["chunks"]
-        if chunks:
-            embeddings = await embedder.embed(chunks)
-            meta_base = {
-                "domain": data["domain"],
-                "title": p["filename"],
-                "source": p["filename"],
-                "chunk_strategy": data["chunk_strategy"],
-            }
-            for i, (text, emb) in enumerate(zip(chunks, embeddings)):
-                await repo.create_chunk(
-                    document_id=doc.id,
-                    content=text,
-                    embedding=emb,
-                    metadata={**meta_base, "chunk_index": i},
+    try:
+        async with async_session_factory() as db:
+            repo = DocumentRepo(db)
+            for p in data["files"]:
+                doc = Document(
+                    domain=data["domain"],
+                    title=p["filename"],
+                    source=p["filename"],
+                    file_type=p["file_type"],
+                    file_size_bytes=p["file_size_bytes"],
+                    word_count=p["word_count"],
+                    chunk_count=len(p["chunks"]),
+                    status="parsing",
                 )
-                total_chunks += 1
-        await repo.update_document(doc.id, status="indexed")
+                db.add(doc)
+                await db.flush()
+                document_ids.append(doc.id)
+                await import_job_store.update(
+                    job_id, document_ids=list(document_ids)
+                )
 
-    await preview_store.remove(req.session_id)
-    await db.commit()
-    # 知识库变更，清除 chat 与 rag 检索缓存避免脏读
-    from app.services.cache import cache_clear_prefix
+                chunks = p["chunks"]
+                if chunks:
 
-    await cache_clear_prefix("chat:")
-    await cache_clear_prefix("rag:")
-    return ConfirmResponse(document_ids=document_ids, total_chunks=total_chunks)
+                    async def _on_progress(done: int, total: int) -> None:
+                        await import_job_store.update(
+                            job_id, processed_chunks=processed_chunks + done
+                        )
+
+                    embeddings = await embedder.embed(chunks, on_progress=_on_progress)
+                    meta_base = {
+                        "domain": data["domain"],
+                        "title": p["filename"],
+                        "source": p["filename"],
+                        "chunk_strategy": data["chunk_strategy"],
+                    }
+                    for i, (text, emb) in enumerate(zip(chunks, embeddings)):
+                        await repo.create_chunk(
+                            document_id=doc.id,
+                            content=text,
+                            embedding=emb,
+                            metadata={**meta_base, "chunk_index": i},
+                        )
+                    processed_chunks += len(chunks)
+                await repo.update_document(doc.id, status="indexed")
+                await import_job_store.update(
+                    job_id,
+                    processed_chunks=processed_chunks,
+                    processed_files=len(document_ids),
+                )
+            await db.commit()
+
+        await preview_store.remove(session_id)
+        # 知识库变更，清除 chat 与 rag 检索缓存避免脏读
+        from app.services.cache import cache_clear_prefix
+
+        await cache_clear_prefix("chat:")
+        await cache_clear_prefix("rag:")
+        await import_job_store.update(job_id, status="succeeded")
+        logger.info("import_job_succeeded job_id=%s docs=%d chunks=%d", job_id, len(document_ids), processed_chunks)
+    except Exception as e:
+        logger.exception("import_job_failed job_id=%s", job_id)
+        # 整个 job 在单事务内，失败回滚 → 无孤儿文档
+        await import_job_store.update(job_id, status="failed", error=str(e))
+
+
+@router.get("/import/{job_id}/status", response_model=ImportJobStatus)
+async def get_import_status(job_id: uuid.UUID):
+    job = await import_job_store.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="import job not found")
+    return ImportJobStatus(
+        job_id=job.job_id,
+        status=job.status,
+        total_files=job.total_files,
+        processed_files=job.processed_files,
+        total_chunks=job.total_chunks,
+        processed_chunks=job.processed_chunks,
+        document_ids=job.document_ids,
+        error=job.error,
+    )
 
 
 # ===========================================================================
