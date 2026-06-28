@@ -35,6 +35,8 @@ from app.tools.builtin.file_tool import FileReadTool, FileWriteTool
 from app.tools.builtin.knowledge_catalog_tool import ListKnowledgeBasesTool
 from app.tools.builtin.knowledge_tool import KnowledgeTool
 from app.tools.builtin.search_tool import SearchTool
+from app.tools.builtin.time_tool import CurrentTimeTool
+from app.tools.builtin.weather_tool import WeatherTool
 from app.tools.registry.registry import registry as tool_registry
 from app.services.cache import cache_get, cache_set
 
@@ -113,7 +115,7 @@ async def _build_runtime(
 
     knowledge_tool = KnowledgeTool(rag_service=rag_service)
     catalog_tool = ListKnowledgeBasesTool(db=db)
-    for tool in [knowledge_tool, catalog_tool, CalculatorTool(), SearchTool(), FileReadTool(), FileWriteTool()]:
+    for tool in [knowledge_tool, catalog_tool, CalculatorTool(), SearchTool(), WeatherTool(), CurrentTimeTool(), FileReadTool(), FileWriteTool()]:
         if tool_registry.get(tool.name) is None:
             tool_registry.register(tool)
 

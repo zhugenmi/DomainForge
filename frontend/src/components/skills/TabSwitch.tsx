@@ -16,7 +16,7 @@ export function TabSwitch({ tabs, active, onChange }: Props) {
           className={`px-4 py-1.5 text-[12px] font-medium transition-colors ${
             active === t.key
               ? "bg-[#2563EB] text-white"
-              : "bg-bg-panel text-text-muted hover:text-text"
+              : "bg-bg-elevated text-text-muted hover:text-text"
           }`}
         >
           {t.label}

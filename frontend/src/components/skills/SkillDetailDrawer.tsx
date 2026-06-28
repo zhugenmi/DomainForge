@@ -90,8 +90,8 @@ export function SkillDetailDrawer({ mode, identifier, open, onClose, onChanged }
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative w-full max-w-xl bg-bg-panel border-l border-border h-full overflow-y-auto shadow-xl">
-        <div className="sticky top-0 bg-bg-panel/95 backdrop-blur border-b border-border px-6 py-4 flex items-center justify-between">
+      <div className="relative w-full max-w-xl bg-bg-elevated border-l border-border h-full overflow-y-auto shadow-xl">
+        <div className="sticky top-0 bg-bg-elevated/95 backdrop-blur border-b border-border px-6 py-4 flex items-center justify-between">
           <h2 className="text-[15px] font-semibold text-text truncate">{name}</h2>
           <button onClick={onClose} className="text-text-muted hover:text-text">
             <X className="w-5 h-5" />

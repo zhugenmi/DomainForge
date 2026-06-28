@@ -64,6 +64,8 @@ class AnswerNode(BaseNode):
         return "\n\n".join(parts)
 
     async def execute(self, state: AgentState) -> AgentState:
+        if state.answered_by_tool:
+            return state
         context_parts = []
 
         capability = await self._build_capability_context()

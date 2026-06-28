@@ -106,7 +106,7 @@ export default function SkillsView() {
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                     placeholder="搜索 skill…"
-                    className="pl-8 pr-3 py-1.5 text-[12px] border border-border rounded-[6px] bg-bg-panel text-text focus:outline-none focus:border-[#2563EB]"
+                    className="pl-8 pr-3 py-1.5 text-[12px] border border-border rounded-[6px] bg-bg-elevated text-text focus:outline-none focus:border-[#2563EB]"
                   />
                 </div>
               </form>

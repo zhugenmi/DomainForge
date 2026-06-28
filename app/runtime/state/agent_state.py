@@ -23,6 +23,13 @@ class AgentState:
     pending_tool_calls: list = field(default_factory=list)
     # 暂挂起始时间戳（monotonic-ish），用于超时跳过；0.0 表示未暂挂
     pending_since: float = 0.0
+    # ReAct 工具循环：累积的 tool 调用消息（assistant tool_call + tool result），
+    # 供 ToolNode 循环内多次 chat_with_tools 使用
+    tool_messages: list[dict] = field(default_factory=list)
+    # ReAct 循环最大轮数（每轮一次 chat_with_tools + 一次工具执行）
+    max_tool_iterations: int = 4
+    # ToolNode 内 LLM 已直接给出最终答案（无后续 tool_call），AnswerNode 跳过重新生成
+    answered_by_tool: bool = False
     # agent 配置注入：system_prompt 非空时覆盖 AnswerNode 默认；domain 非空时过滤检索
     agent_system_prompt: str = ""
     agent_domain: str | None = None

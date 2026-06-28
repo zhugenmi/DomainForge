@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "DomainForge — 领域智能体控制台",
+  title: "DomainForge — 领域智能体与知识服务平台",
   description: "面向垂直领域的企业级 Agent 平台",
   icons: { icon: "/favicon.svg" },
 };
