@@ -33,6 +33,29 @@ def test_make_citations_legal_uses_article_as_locator():
     assert "民事主体" in c.snippet
 
 
+def test_make_citations_legal_includes_chapter():
+    """legal chunk 带 chapter metadata → Citation.chapter 填充，footnote 多行显示。"""
+    chunk = {
+        "id": "c1",
+        "content": "第三十六条　国家实行劳动者每日工作时间不超过八小时的工时制度。",
+        "document_id": "d1",
+        "metadata": {
+            "title": "中华人民共和国劳动法_20181229.docx",
+            "chapter": "第三章　劳动合同和集体合同",
+            "article": "第三十六条",
+            "chunk_index": 35,
+        },
+    }
+    cites = make_citations([chunk])
+    c = cites[0]
+    assert c.title == "中华人民共和国劳动法_20181229.docx"
+    assert c.chapter == "第三章　劳动合同和集体合同"
+    assert c.locator == "第三十六条"
+    footnote = render_footnote(cites)
+    assert "第三章　劳动合同和集体合同" in footnote
+    assert "第三十六条" in footnote
+
+
 def test_make_citations_semantic_fallback_when_no_article():
     """semantic chunk 无 article 且 content 无"第X条" → "相关段落"（不显示无意义的"第N段"）。"""
     cites = make_citations([_semantic_chunk()])

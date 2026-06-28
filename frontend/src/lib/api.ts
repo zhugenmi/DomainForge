@@ -66,6 +66,7 @@ export interface SessionInfo {
 export interface Citation {
   index: number;
   title: string;
+  chapter?: string;
   locator: string;
   snippet: string;
   document_id: string;

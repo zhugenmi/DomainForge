@@ -36,8 +36,6 @@ ehthumbs.db
 
 # --- Project: Local Data ---
 /data/raw_documents/
-/data/parsed_documents/
-/data/eval_datasets/
 /data/uploads/
 !data/.gitkeep
 
@@ -83,8 +81,6 @@ jaeger-data/
 
 # --- Project: ignore local data ---
 /data/raw_documents/
-/data/parsed_documents/
-/data/eval_datasets/
 /data/uploads/
 docs/
 alembic/

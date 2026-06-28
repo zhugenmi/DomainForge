@@ -78,6 +78,54 @@ async def test_bge_reranker_scores_format(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_bge_reranker_dashscope_format(monkeypatch):
+    """DashScope 后端：URL 走原生路径，请求体嵌套 input/parameters，响应用 relevance_score。"""
+    reranker = BGEReranker(
+        api_key="k",
+        base_url="https://llm-xxx.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
+        model="qwen3-rerank",
+    )
+    assert reranker._is_dashscope()
+
+    captured = {}
+
+    class _FakeClient:
+        def __init__(self, *a, **k):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def post(self, url, json=None, headers=None):
+            captured["url"] = url
+            captured["json"] = json
+            return _FakeRerankResponse(
+                {"output": {"results": [
+                    {"index": 0, "relevance_score": 0.9},
+                    {"index": 2, "relevance_score": 0.4},
+                    {"index": 1, "relevance_score": 0.1},
+                ]}}
+            )
+
+    monkeypatch.setattr("app.llm.rerank.bge_reranker.httpx.AsyncClient", _FakeClient)
+    out = await reranker.rerank("违约", ["d0", "d1", "d2"], top_n=3)
+    # URL 走原生 rerank 路径，不是 /rerank
+    assert captured["url"].endswith("/api/v1/services/rerank/text-rerank/text-rerank")
+    # 请求体嵌套 input/parameters
+    assert captured["json"]["input"]["query"] == "违约"
+    assert captured["json"]["input"]["documents"] == ["d0", "d1", "d2"]
+    assert captured["json"]["parameters"]["top_n"] == 3
+    # 响应按 relevance_score 排序
+    assert out[0].text == "d0" and out[0].score == 0.9
+    assert out[1].text == "d2" and out[1].score == 0.4
+    assert out[2].text == "d1" and out[2].score == 0.1
+    assert all(c.index is not None for c in out)
+
+
+@pytest.mark.asyncio
 async def test_rerank_service_uses_real_when_available(monkeypatch):
     reranker = BGEReranker(api_key="k", base_url="http://rerank")
     svc = RerankService(reranker=reranker)

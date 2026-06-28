@@ -8,10 +8,11 @@ from dataclasses import dataclass
 class Citation:
     index: int
     title: str
-    locator: str
-    snippet: str
-    document_id: str
-    chunk_id: str
+    chapter: str = ""
+    locator: str = ""
+    snippet: str = ""
+    document_id: str = ""
+    chunk_id: str = ""
 
     def render(self) -> str:
         return f"[{self.index}]"
@@ -43,6 +44,7 @@ def make_citations(chunks: list[dict], max_snippet: int = 80) -> list[Citation]:
             Citation(
                 index=i,
                 title=str(metadata.get("title") or metadata.get("source") or "未知文档"),
+                chapter=str(metadata.get("chapter") or ""),
                 locator=_locator(metadata, content),
                 snippet=snippet,
                 document_id=str(c.get("document_id") or ""),
@@ -89,7 +91,13 @@ def render_footnote(citations: list[Citation]) -> str:
         return ""
     lines = ["引用："]
     for c in citations:
-        lines.append(f"[{c.index}] {c.title} · {c.locator} | {c.snippet}")
+        header = f"[{c.index}] {c.title}"
+        if c.chapter:
+            header += f" · {c.chapter}"
+        if c.locator:
+            header += f" · {c.locator}"
+        lines.append(header)
+        lines.append(c.snippet)
     return "\n".join(lines)
 
 

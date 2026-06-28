@@ -163,6 +163,7 @@ async def upload_files(
                 "file_size_bytes": len(data),
                 "parsed_text": parsed_text,
                 "chunks": [c.text for c in chunks],
+                "chunk_metas": [c.metadata for c in chunks],
                 "word_count": word_count,
             }
         )
@@ -211,22 +212,24 @@ async def confirm_import(req: ConfirmRequest):
     data = await preview_store.get(req.session_id)
     if data is None:
         raise HTTPException(status_code=410, detail="preview session expired or not found")
+    # 原子消费：立即 remove，避免并发/重复 confirm 在 import 进行中读到同一 session
+    # 而创建第二个 job、重复插入 chunks。后台任务拿数据副本即可，不再依赖 session。
+    await preview_store.remove(req.session_id)
 
     total_files = len(data["files"])
     total_chunks = sum(len(p["chunks"]) for p in data["files"])
     job = await import_job_store.create(total_files=total_files, total_chunks=total_chunks)
 
-    # 占用 session 数据副本，避免后台任务读到被 remove 的状态
     payload = {
         "domain": data["domain"],
         "chunk_strategy": data["chunk_strategy"],
         "files": data["files"],
     }
-    asyncio.create_task(_run_import(job.job_id, req.session_id, payload))
+    asyncio.create_task(_run_import(job.job_id, payload))
     return ConfirmResponse(job_id=job.job_id, status="pending")
 
 
-async def _run_import(job_id: uuid.UUID, session_id: uuid.UUID, data: dict) -> None:
+async def _run_import(job_id: uuid.UUID, data: dict) -> None:
     """后台执行 embed + 持久化。使用独立 DB session，逐文件更新进度。"""
     await import_job_store.update(job_id, status="running")
     llm = OpenAIProvider()
@@ -270,12 +273,14 @@ async def _run_import(job_id: uuid.UUID, session_id: uuid.UUID, data: dict) -> N
                         "source": p["filename"],
                         "chunk_strategy": data["chunk_strategy"],
                     }
+                    chunk_metas = p.get("chunk_metas") or []
                     for i, (text, emb) in enumerate(zip(chunks, embeddings)):
+                        per_chunk = chunk_metas[i] if i < len(chunk_metas) else {}
                         await repo.create_chunk(
                             document_id=doc.id,
                             content=text,
                             embedding=emb,
-                            metadata={**meta_base, "chunk_index": i},
+                            metadata={**meta_base, **per_chunk, "chunk_index": i},
                         )
                     processed_chunks += len(chunks)
                 await repo.update_document(doc.id, status="indexed")
@@ -286,7 +291,6 @@ async def _run_import(job_id: uuid.UUID, session_id: uuid.UUID, data: dict) -> N
                 )
             await db.commit()
 
-        await preview_store.remove(session_id)
         # 知识库变更，清除 chat 与 rag 检索缓存避免脏读
         from app.services.cache import cache_clear_prefix
 

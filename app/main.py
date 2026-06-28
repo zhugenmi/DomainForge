@@ -20,7 +20,7 @@ logger = get_logger("main")
 
 def _check_secrets() -> None:
     """启动时检查关键密钥是否仍为默认/空值。dev 模式仅 warning，prod 模式已有 validator 兜底。"""
-    for key in ("JWT_SECRET", "ADMIN_API_KEY", "LLM_API_KEY"):
+    for key in ("JWT_SECRET", "LLM_API_KEY"):
         if settings.is_secret_default(key):
             logger.warning("secret_default", key=key, env=settings.APP_ENV, msg=f"{key} 仍为默认/空值，生产前必须替换")
 

@@ -270,6 +270,52 @@ async def test_confirm_import_marks_failed_on_embed_error(app_with_sqlite_and_ca
         assert docs == []
 
 
+async def test_legal_import_persists_chapter_and_article_metadata(app_with_sqlite_and_categories):
+    """legal 导入后 chunk metadata 应带 article + chapter（regression: 上传曾丢弃 chunk.metadata）。"""
+    app = app_with_sqlite_and_categories
+    import httpx
+    from sqlalchemy import select
+    from app.database.models.chunk import DocumentChunk
+    from app.database.session import get_db as _get_db  # noqa: F401
+
+    transport = httpx.ASGITransport(app=app)
+    content = (
+        "第一章　总则\n"
+        "第一条　立法目的。\n内容A。\n"
+        "第二条　适用范围。\n内容B。\n"
+        "第三章　处罚\n"
+        "第三十条　处罚条款。\n"
+    )
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
+        up = await ac.post(
+            "/api/v1/knowledge/upload",
+            data={"domain": "legal", "chunk_strategy": "legal"},
+            files=[("files", ("law.txt", content.encode("utf-8"), "text/plain"))],
+        )
+        assert up.status_code == 200, up.text
+        sid = up.json()["session_id"]
+        cf = await ac.post("/api/v1/knowledge/confirm", json={"session_id": sid})
+        assert cf.status_code == 202
+    result = await _wait_for_job(app, cf.json()["job_id"])
+    assert result["status"] == "succeeded"
+    doc_id = result["document_ids"][0]
+
+    import app.api.knowledge as knowledge_mod
+    factory = knowledge_mod.async_session_factory
+    async with factory() as s:
+        chunks = (await s.execute(
+            select(DocumentChunk).where(DocumentChunk.document_id == uuid.UUID(doc_id))
+            .order_by(DocumentChunk.created_at)
+        )).scalars().all()
+        assert len(chunks) >= 3
+        first = chunks[0].metadata_
+        assert first.get("article") == "第一条"
+        assert first.get("chapter") == "第一章　总则"
+        last = chunks[-1].metadata_
+        assert last.get("article") == "第三十条"
+        assert last.get("chapter") == "第三章　处罚"
+
+
 async def test_delete_document_cascades_chunks(app_with_sqlite_and_categories):
     app = app_with_sqlite_and_categories
     import httpx
