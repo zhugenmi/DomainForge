@@ -14,9 +14,11 @@ import {
 } from "lucide-react";
 import {
   confirmImport,
+  getImportStatus,
   listCategories,
   uploadFiles,
   type CategoryStats,
+  type ImportJobStatus,
   type PreviewSession,
 } from "@/lib/api";
 
@@ -55,6 +57,7 @@ export default function ImportModal({
   const [error, setError] = useState("");
   const [preview, setPreview] = useState<PreviewSession | null>(null);
   const [result, setResult] = useState<{ total_chunks: number; document_ids: string[] } | null>(null);
+  const [jobStatus, setJobStatus] = useState<ImportJobStatus | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -87,10 +90,25 @@ export default function ImportModal({
     if (!preview) return;
     setLoading(true);
     setError("");
+    setJobStatus(null);
     try {
-      const res = await confirmImport(preview.session_id);
-      setResult(res);
-      setPhase("done");
+      const { job_id } = await confirmImport(preview.session_id);
+      // 轮询 job 状态直到终态
+      const deadline = Date.now() + 10 * 60 * 1000; // 10 分钟上限
+      while (Date.now() < deadline) {
+        const s = await getImportStatus(job_id);
+        setJobStatus(s);
+        if (s.status === "succeeded") {
+          setResult({ total_chunks: s.total_chunks, document_ids: s.document_ids });
+          setPhase("done");
+          return;
+        }
+        if (s.status === "failed") {
+          throw new Error(s.error || "导入失败");
+        }
+        await new Promise((r) => setTimeout(r, 1500));
+      }
+      throw new Error("导入超时");
     } catch (e) {
       setError(String(e));
     } finally {
@@ -307,6 +325,35 @@ export default function ImportModal({
                   )}
                 </div>
               ))}
+            </div>
+          )}
+
+          {phase === "preview" && loading && jobStatus && (
+            <div className="mt-4 px-4 py-3 border border-border rounded-[10px] bg-bg-surface-2/60">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[12px] text-text-dim font-medium flex items-center gap-1.5">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-accent" />
+                  正在生成嵌入向量…
+                </span>
+                <span className="text-[11px] text-text-faint font-mono">
+                  {jobStatus.processed_chunks} / {jobStatus.total_chunks} 分块
+                </span>
+              </div>
+              <div className="h-1.5 w-full rounded-full bg-bg-hover overflow-hidden">
+                <div
+                  className="h-full bg-accent transition-all duration-300"
+                  style={{
+                    width: `${
+                      jobStatus.total_chunks > 0
+                        ? Math.min(100, (jobStatus.processed_chunks / jobStatus.total_chunks) * 100)
+                        : 0
+                    }%`,
+                  }}
+                />
+              </div>
+              <p className="text-[10px] text-text-faint mt-1.5">
+                大文件导入可能需要数分钟，遇到速率限制会自动退避重试，请勿关闭窗口。
+              </p>
             </div>
           )}
 

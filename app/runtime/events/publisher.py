@@ -30,8 +30,11 @@ class EventPublisher:
     async def reflection(self, verdict: dict) -> None:
         await self.bus.publish(SSEEventType.REFLECTION, verdict)
 
-    async def answer(self, answer: str) -> None:
-        await self.bus.publish(SSEEventType.FINAL_ANSWER, {"answer": answer})
+    async def answer(self, answer: str, citations: list | None = None) -> None:
+        data: dict[str, Any] = {"answer": answer}
+        if citations is not None:
+            data["citations"] = citations
+        await self.bus.publish(SSEEventType.FINAL_ANSWER, data)
 
     async def error(self, message: str) -> None:
         await self.bus.publish_error(message)

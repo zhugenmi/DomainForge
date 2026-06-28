@@ -82,17 +82,10 @@ def test_bm25_index_search():
     assert res[0][0] == "d1"
 
 
-class _StubChunk:
-    def __init__(self, content, doc_id, chunk_id):
-        self.content = content
-        self.document_id = doc_id
-        self.id = chunk_id
-
-
 def test_build_context_with_citations():
     chunks = [
-        _StubChunk("第一条内容", "doc-1", "chunk-1"),
-        _StubChunk("第二条内容", "doc-1", "chunk-2"),
+        {"id": "chunk-1", "content": "第一条内容", "document_id": "doc-1", "metadata": {"title": "doc-1", "chunk_index": 0}},
+        {"id": "chunk-2", "content": "第二条内容", "document_id": "doc-1", "metadata": {"title": "doc-1", "chunk_index": 1}},
     ]
     ctx = build_context(chunks, memories=[{"role": "user", "content": "前问"}])
     assert "[1]" in ctx.text

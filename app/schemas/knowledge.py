@@ -87,8 +87,20 @@ class ConfirmRequest(BaseModel):
 
 
 class ConfirmResponse(BaseModel):
-    document_ids: list[uuid.UUID]
-    total_chunks: int
+    """confirm 立即返回：导入已排队，前端轮询 status。"""
+    job_id: uuid.UUID
+    status: str = "pending"
+
+
+class ImportJobStatus(BaseModel):
+    job_id: uuid.UUID
+    status: str  # pending | running | succeeded | failed
+    total_files: int = 0
+    processed_files: int = 0
+    total_chunks: int = 0
+    processed_chunks: int = 0
+    document_ids: list[uuid.UUID] = Field(default_factory=list)
+    error: str | None = None
 
 
 class CategoryCreate(BaseModel):

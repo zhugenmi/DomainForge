@@ -72,8 +72,13 @@ class OpenAIProvider(LLMProvider):
             api_key=settings.EMBEDDING_API_KEY or settings.LLM_API_KEY,
             base_url=settings.EMBEDDING_BASE_URL,
         )
-        response = await embed_client.embeddings.create(
-            model=kwargs.pop("model", settings.EMBEDDING_MODEL),
-            input=texts,
-        )
+        # 显式传 dimensions，保证输出维度与 DB Vector(EMBEDDING_DIMENSION) 一致。
+        # 不支持 dimensions 参数的模型会忽略；支持者（text-embedding-v3 / text-embedding-3-small）按此截断。
+        create_kwargs: dict = {
+            "model": kwargs.pop("model", settings.EMBEDDING_MODEL),
+            "input": texts,
+        }
+        if settings.EMBEDDING_DIMENSION:
+            create_kwargs["dimensions"] = settings.EMBEDDING_DIMENSION
+        response = await embed_client.embeddings.create(**create_kwargs)
         return [item.embedding for item in response.data]

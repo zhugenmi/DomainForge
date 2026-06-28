@@ -16,6 +16,7 @@ import {
   updateSession,
   uploadChatAttachments,
   type AgentInfo,
+  type Citation,
   type MessageInfo,
   type SSEEvent,
 } from "@/lib/api";
@@ -43,6 +44,7 @@ interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
+  citations?: Citation[];
 }
 
 interface StreamTag {
@@ -101,6 +103,7 @@ export default function ChatWorkspace() {
   const [streaming, setStreaming] = useState(false);
   const [streamTags, setStreamTags] = useState<StreamTag[]>([]);
   const [streamAnswer, setStreamAnswer] = useState("");
+  const [streamCitations, setStreamCitations] = useState<Citation[]>([]);
   const [resetTick, setResetTick] = useState(0);
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [currentAgentId, setCurrentAgentId] = useState<string | null>(null);
@@ -132,6 +135,7 @@ export default function ChatWorkspace() {
     setSessionId(undefined);
     setStreamTags([]);
     setStreamAnswer("");
+    setStreamCitations([]);
     setInput("");
     setStreaming(false);
     setCurrentAgentId(null);
@@ -153,12 +157,14 @@ export default function ChatWorkspace() {
             id: m.id,
             role: m.role as "user" | "assistant",
             content: m.content,
+            citations: m.citations ?? undefined,
           })),
       );
       setSessionId(sid);
       setCurrentAgentId(sess?.agent_id ?? null);
       setStreamTags([]);
       setStreamAnswer("");
+      setStreamCitations([]);
       setStreaming(false);
     } catch {
       // ignore
@@ -208,6 +214,7 @@ export default function ChatWorkspace() {
     setStreaming(true);
     setStreamTags([]);
     setStreamAnswer("");
+    setStreamCitations([]);
 
     let attachmentIds: string[] = [];
     if (attachments.length > 0) {
@@ -229,6 +236,7 @@ export default function ChatWorkspace() {
     }
 
     let finalAnswer = "";
+    let finalCitations: Citation[] = [];
 
     try {
       await chatStream(
@@ -257,7 +265,9 @@ export default function ChatWorkspace() {
             ]);
           } else if (event.event === "final_answer" && event.data.answer) {
             finalAnswer = event.data.answer as string;
+            finalCitations = (event.data.citations as Citation[] | undefined) ?? [];
             setStreamAnswer(finalAnswer);
+            setStreamCitations(finalCitations);
           }
           if (event.data.session_id && !sessionId) {
             const sid = event.data.session_id as string;
@@ -277,11 +287,12 @@ export default function ChatWorkspace() {
       if (finalAnswer) {
         setMessages((prev) => [
           ...prev,
-          { id: crypto.randomUUID(), role: "assistant", content: finalAnswer },
+          { id: crypto.randomUUID(), role: "assistant", content: finalAnswer, citations: finalCitations },
         ]);
       }
       setStreaming(false);
       setStreamAnswer("");
+      setStreamCitations([]);
       inputRef.current?.focus();
     }
   };
@@ -354,7 +365,7 @@ export default function ChatWorkspace() {
               {messages.map((msg) => (
                 <MessageBubble key={msg.id} msg={msg} />
               ))}
-              {streaming && <StreamingBubble tags={streamTags} answer={streamAnswer} />}
+              {streaming && <StreamingBubble tags={streamTags} answer={streamAnswer} citations={streamCitations} />}
               <div ref={messagesEndRef} />
             </div>
           )}
@@ -538,6 +549,27 @@ function EmptyState() {
   );
 }
 
+function renderAnswerWithCitations(answer: string, msgId: string): string {
+  return answer.replace(/\[(\d+)\]/g, (_, num) => `[[${num}]](#cite-${msgId}-${num})`);
+}
+
+function CitationList({ citations, msgId }: { citations: Citation[]; msgId: string }) {
+  if (!citations || citations.length === 0) return null;
+  return (
+    <ol className="citations mt-3 pt-2 border-t border-border space-y-1.5">
+      {citations.map((c) => (
+        <li key={c.index} id={`cite-${msgId}-${c.index}`} className="text-[11px] text-text-dim leading-relaxed">
+          <span className="text-text-faint font-mono mr-1">[{c.index}]</span>
+          <span className="text-text font-medium">{c.title}</span>
+          <span className="text-text-faint mx-1">·</span>
+          <span className="text-accent">{c.locator}</span>
+          <div className="text-text-muted line-clamp-2 mt-0.5">{c.snippet}</div>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 function MessageBubble({ msg }: { msg: Message }) {
   const isUser = msg.role === "user";
   return (
@@ -564,7 +596,10 @@ function MessageBubble({ msg }: { msg: Message }) {
             <div className="whitespace-pre-wrap">{msg.content}</div>
           ) : (
             <div className="md-body">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                {renderAnswerWithCitations(msg.content, msg.id)}
+              </ReactMarkdown>
+              <CitationList citations={msg.citations ?? []} msgId={msg.id} />
             </div>
           )}
         </div>
@@ -578,7 +613,7 @@ function MessageBubble({ msg }: { msg: Message }) {
   );
 }
 
-function StreamingBubble({ tags, answer }: { tags: StreamTag[]; answer: string }) {
+function StreamingBubble({ tags, answer, citations }: { tags: StreamTag[]; answer: string; citations: Citation[] }) {
   return (
     <div className="space-y-3 fade-in">
       {tags.length > 0 && (
@@ -612,7 +647,10 @@ function StreamingBubble({ tags, answer }: { tags: StreamTag[]; answer: string }
           </div>
           {answer ? (
             <div className="md-body break-words">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{answer}</ReactMarkdown>
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                {renderAnswerWithCitations(answer, "streaming")}
+              </ReactMarkdown>
+              <CitationList citations={citations} msgId="streaming" />
             </div>
           ) : (
             <div className="flex items-center gap-1.5 py-0.5">

@@ -112,3 +112,150 @@ async def test_answer_node_warns_no_function_calls_when_web_search_used():
     assert "function_calls" in system_content or "函数调用" in system_content
     bus.done()
     _ = [e async for e in bus.stream()]
+
+
+@pytest.mark.asyncio
+async def test_answer_node_numbers_retrieved_context():
+    """retrieved_docs 应在 prompt 中以 [N] 编号出现。"""
+    bus = EventBus()
+    llm = _CaptureLLM("ans")
+    node = AnswerNode(llm=llm, event_bus=bus)
+    state = AgentState(query="Q")
+    state.retrieved_docs = [
+        {
+            "id": "c1",
+            "content": "第三条 内容A。",
+            "document_id": "d1",
+            "score": 0.9,
+            "metadata": {"title": "民法典.txt", "article": "第三条"},
+        }
+    ]
+    await node.execute(state)
+    system_content = llm.received_messages[0]["content"]
+    assert "[1]" in system_content
+    assert "第三条 内容A。" in system_content
+    bus.done()
+    _ = [e async for e in bus.stream()]
+
+
+@pytest.mark.asyncio
+async def test_answer_node_prompt_contains_citation_instruction():
+    bus = EventBus()
+    llm = _CaptureLLM("ans")
+    node = AnswerNode(llm=llm, event_bus=bus)
+    state = AgentState(query="Q")
+    state.retrieved_docs = [
+        {
+            "id": "c1",
+            "content": "X",
+            "document_id": "d1",
+            "score": 0.9,
+            "metadata": {"title": "t", "chunk_index": 0},
+        }
+    ]
+    await node.execute(state)
+    system_content = llm.received_messages[0]["content"]
+    assert "上标编号" in system_content or "标注" in system_content
+    bus.done()
+    _ = [e async for e in bus.stream()]
+
+
+@pytest.mark.asyncio
+async def test_answer_node_populates_state_citations():
+    bus = EventBus()
+    llm = _CaptureLLM("根据第三条[1]作答。")
+    node = AnswerNode(llm=llm, event_bus=bus)
+    state = AgentState(query="Q")
+    state.retrieved_docs = [
+        {
+            "id": "c1",
+            "content": "第三条 内容A。",
+            "document_id": "d1",
+            "score": 0.9,
+            "metadata": {"title": "民法典.txt", "article": "第三条"},
+        }
+    ]
+    await node.execute(state)
+    assert len(state.citations) == 1
+    c = state.citations[0]
+    assert c["index"] == 1
+    assert c["title"] == "民法典.txt"
+    assert c["locator"] == "第三条"
+    assert c["chunk_id"] == "c1"
+    bus.done()
+    _ = [e async for e in bus.stream()]
+
+
+@pytest.mark.asyncio
+async def test_answer_node_emits_citations_in_final_answer_event():
+    bus = EventBus()
+    llm = _CaptureLLM("ans")
+    node = AnswerNode(llm=llm, event_bus=bus)
+    state = AgentState(query="Q")
+    state.retrieved_docs = [
+        {
+            "id": "c1",
+            "content": "第三条 内容A。",
+            "document_id": "d1",
+            "score": 0.9,
+            "metadata": {"title": "民法典.txt", "article": "第三条"},
+        }
+    ]
+
+    await node.execute(state)
+    bus.done()
+
+    events = []
+    async for line in bus.stream():
+        # line is "data: {json}\n\n"
+        payload_str = line.removeprefix("data: ").strip()
+        import json
+
+        ev = json.loads(payload_str)
+        events.append(ev)
+
+    final_events = [e for e in events if e["event"] == "final_answer"]
+    assert len(final_events) == 1, f"Expected 1 final_answer event, got {len(final_events)}"
+    assert "citations" in final_events[0]["data"]
+    assert final_events[0]["data"]["citations"] == state.citations
+
+
+@pytest.mark.asyncio
+async def test_answer_node_no_citations_when_no_retrieval():
+    bus = EventBus()
+    llm = _CaptureLLM("ans")
+    node = AnswerNode(llm=llm, event_bus=bus)
+    state = AgentState(query="Q")
+    await node.execute(state)
+    assert state.citations == []
+    bus.done()
+    _ = [e async for e in bus.stream()]
+
+
+@pytest.mark.asyncio
+async def test_answer_node_reorders_citations_by_appearance():
+    """LLM 乱标编号（先 [2] 后 [1]）→ AnswerNode 重排为正序 [1][2]，citations 跟着重排。
+    未引用的 [3] 过滤掉。"""
+    bus = EventBus()
+    # LLM 输出先引 [2] 再引 [1]，未引 [3]
+    llm = _CaptureLLM("回答 B[2]。回答 A[1]。")
+    node = AnswerNode(llm=llm, event_bus=bus)
+    state = AgentState(query="Q")
+    state.retrieved_docs = [
+        {"id": "c1", "content": "第一条 内容。", "document_id": "d1", "score": 0.9,
+         "metadata": {"title": "法.txt", "article": "第一条"}},
+        {"id": "c2", "content": "第二条 内容。", "document_id": "d1", "score": 0.8,
+         "metadata": {"title": "法.txt", "article": "第二条"}},
+        {"id": "c3", "content": "第三条 内容。", "document_id": "d1", "score": 0.7,
+         "metadata": {"title": "法.txt", "article": "第三条"}},
+    ]
+    await node.execute(state)
+
+    # answer 重写为正序
+    assert state.final_answer == "回答 B[1]。回答 A[2]。"
+    # citations 只剩被引用的 2 条，按出现顺序（原 [2] 在前，原 [1] 在后），重编号
+    assert [c["index"] for c in state.citations] == [1, 2]
+    assert state.citations[0]["chunk_id"] == "c2"  # 原 [2]
+    assert state.citations[1]["chunk_id"] == "c1"  # 原 [1]
+    bus.done()
+    _ = [e async for e in bus.stream()]

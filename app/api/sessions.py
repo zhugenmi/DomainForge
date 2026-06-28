@@ -96,6 +96,7 @@ async def list_messages(session_id: uuid.UUID, limit: int = 100, db: AsyncSessio
             "id": str(m.id),
             "role": m.role,
             "content": m.content,
+            "citations": m.citations,
             "created_at": m.created_at.isoformat() if m.created_at else None,
         }
         for m in msgs

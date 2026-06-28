@@ -26,7 +26,7 @@ from app.rag.retrieval.vector import VectorRetriever
 from app.rag.service import RAGService
 from app.runtime.runtime import AgentRuntime
 from app.runtime.state.agent_state import AgentState
-from app.schemas.chat import AttachmentPreview, AttachmentUploadResponse, ChatModelsResponse, ChatRequest, ChatResponse
+from app.schemas.chat import AttachmentPreview, AttachmentUploadResponse, ChatModelsResponse, ChatRequest, ChatResponse, CitationOut
 from app.security.prompt_guard import check_prompt
 from app.services.attachment_store import attachment_store
 from app.tools.builtin.calculator_tool import CalculatorTool
@@ -193,13 +193,19 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
         return ChatResponse(session_id=request.session_id, answer=msg, intent="blocked")
 
     await _maybe_cache(request.session_id, request.query, state.intent, state.final_answer)
-    await message_repo.create(session_id=request.session_id, role="assistant", content=state.final_answer)
+    await message_repo.create(
+        session_id=request.session_id,
+        role="assistant",
+        content=state.final_answer,
+        citations=getattr(state, "citations", None),
+    )
     await db.commit()
 
     return ChatResponse(
         session_id=request.session_id,
         answer=state.final_answer,
         intent=state.intent,
+        citations=[CitationOut(**c) for c in state.citations] if getattr(state, "citations", None) else None,
     )
 
 
@@ -270,7 +276,12 @@ async def chat_stream(query: str, session_id: uuid.UUID | None = None, db: Async
         finally:
             answer = state.final_answer or "[生成失败：未获得回复]"
             await _maybe_cache(session_id, query, state.intent, answer)
-            await message_repo.create(session_id=session_id, role="assistant", content=answer)
+            await message_repo.create(
+                session_id=session_id,
+                role="assistant",
+                content=answer,
+                citations=getattr(state, "citations", None),
+            )
             try:
                 await db.commit()
             except Exception:
@@ -348,7 +359,12 @@ async def chat_stream_post(request: ChatRequest, db: AsyncSession = Depends(get_
         finally:
             answer = state.final_answer or "[生成失败：未获得回复]"
             await _maybe_cache(request.session_id, request.query, state.intent, answer)
-            await message_repo.create(session_id=request.session_id, role="assistant", content=answer)
+            await message_repo.create(
+                session_id=request.session_id,
+                role="assistant",
+                content=answer,
+                citations=getattr(state, "citations", None),
+            )
             try:
                 await db.commit()
             except Exception:
