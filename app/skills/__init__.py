@@ -13,3 +13,7 @@ __all__ += ["SkillRegistry", "skill_registry"]
 from app.skills.injection import build_skill_context_block
 
 __all__ += ["build_skill_context_block"]
+
+from app.skills.service import SkillService, InstalledSkillDTO, InstalledSkillDetailDTO
+
+__all__ += ["SkillService", "InstalledSkillDTO", "InstalledSkillDetailDTO"]
