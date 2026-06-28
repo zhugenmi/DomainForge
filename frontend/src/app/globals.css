@@ -267,6 +267,17 @@ textarea::-webkit-resizer { display: none; }
 .md-body li > ul, .md-body li > ol { margin: 0.2em 0; }
 .md-body a { color: var(--accent); text-decoration: none; }
 .md-body a:hover { text-decoration: underline; }
+.md-body a[href^="#cite-"] {
+  vertical-align: super;
+  font-size: 0.7em;
+  color: var(--accent, #2563eb);
+  text-decoration: none;
+  margin-left: 1px;
+  font-weight: 600;
+}
+.md-body a[href^="#cite-"]:hover {
+  text-decoration: underline;
+}
 .md-body blockquote {
   margin: 0.6em 0; padding: 0.2em 0.9em; border-left: 3px solid var(--border-bright);
   color: var(--text-dim); background: var(--bg-surface-2); border-radius: 0 6px 6px 0;

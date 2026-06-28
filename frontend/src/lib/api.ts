@@ -63,11 +63,21 @@ export interface SessionInfo {
   agent_id?: string | null;
 }
 
+export interface Citation {
+  index: number;
+  title: string;
+  locator: string;
+  snippet: string;
+  document_id: string;
+  chunk_id: string;
+}
+
 export interface MessageInfo {
   id: string;
   role: string;
   content: string;
   created_at: string | null;
+  citations?: Citation[] | null;
 }
 
 export interface AuditEntry {
@@ -288,14 +298,29 @@ export async function uploadFiles(
   return res.json();
 }
 
+export interface ImportJobStatus {
+  job_id: string;
+  status: "pending" | "running" | "succeeded" | "failed";
+  total_files: number;
+  processed_files: number;
+  total_chunks: number;
+  processed_chunks: number;
+  document_ids: string[];
+  error: string | null;
+}
+
 export async function confirmImport(
   sessionId: string,
-): Promise<{ document_ids: string[]; total_chunks: number }> {
+): Promise<{ job_id: string; status: string }> {
   return getJSON(`${API_BASE}/knowledge/confirm`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ session_id: sessionId }),
   });
+}
+
+export async function getImportStatus(jobId: string): Promise<ImportJobStatus> {
+  return getJSON<ImportJobStatus>(`${API_BASE}/knowledge/import/${jobId}/status`);
 }
 
 export async function deleteDocument(id: string): Promise<{ deleted: string }> {
