@@ -26,7 +26,7 @@ from app.rag.retrieval.vector import VectorRetriever
 from app.rag.service import RAGService
 from app.runtime.runtime import AgentRuntime
 from app.runtime.state.agent_state import AgentState
-from app.schemas.chat import AttachmentPreview, AttachmentUploadResponse, ChatModelsResponse, ChatRequest, ChatResponse
+from app.schemas.chat import AttachmentPreview, AttachmentUploadResponse, ChatModelsResponse, ChatRequest, ChatResponse, CitationOut
 from app.security.prompt_guard import check_prompt
 from app.services.attachment_store import attachment_store
 from app.tools.builtin.calculator_tool import CalculatorTool
@@ -205,6 +205,7 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
         session_id=request.session_id,
         answer=state.final_answer,
         intent=state.intent,
+        citations=[CitationOut(**c) for c in state.citations] if getattr(state, "citations", None) else None,
     )
 
 

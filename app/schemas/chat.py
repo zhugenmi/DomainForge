@@ -36,6 +36,16 @@ class ChatResponse(BaseModel):
     session_id: uuid.UUID
     answer: str
     intent: str | None = None
+    citations: list[CitationOut] | None = None
+
+
+class CitationOut(BaseModel):
+    index: int
+    title: str
+    locator: str
+    snippet: str
+    document_id: str
+    chunk_id: str
 
 
 class AttachmentPreview(BaseModel):
