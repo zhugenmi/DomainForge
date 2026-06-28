@@ -12,12 +12,13 @@ class BuiltContext:
 
 
 def build_context(
-    chunks: list,
+    chunks: list[dict],
     memories: list[dict] | None = None,
     tool_results: list[dict] | None = None,
     max_chars: int = 4000,
 ) -> BuiltContext:
-    """构造供 LLM 使用的上下文，附带引用编号。"""
+    """构造供 LLM 使用的上下文，附带引用编号。chunks 为 dict 列表
+    （含 content/document_id/id/metadata）。"""
     parts: list[str] = []
     citations = make_citations(chunks)
 
@@ -28,7 +29,7 @@ def build_context(
     if chunks:
         doc_lines = []
         for c, cite in zip(chunks, citations):
-            doc_lines.append(f"{cite.render()} {c.content}")
+            doc_lines.append(f"{cite.render()} {c.get('content', '')}")
         parts.append("检索到的知识：\n" + "\n---\n".join(doc_lines))
 
     if tool_results:
