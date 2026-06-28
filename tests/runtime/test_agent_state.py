@@ -46,3 +46,8 @@ def test_agent_state_new_fields_set():
     assert s.deep_think is True
     assert s.attachments[0]["filename"] == "a.txt"
     assert s.reasoning == "think..."
+
+
+def test_agent_state_has_citations_default_empty():
+    state = AgentState(query="Q")
+    assert state.citations == []

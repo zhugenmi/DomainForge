@@ -12,6 +12,7 @@ class AgentState:
     plan: list[str] = field(default_factory=list)
     retrieved_docs: list[dict] = field(default_factory=list)
     tool_results: list[dict] = field(default_factory=list)
+    citations: list[dict] = field(default_factory=list)
     memories: list[dict[str, str]] = field(default_factory=list)
     final_answer: str = ""
     retries: int = 0
