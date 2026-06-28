@@ -1,8 +1,28 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
 
+export interface ChatStreamRequest {
+  query: string;
+  session_id?: string;
+  agent_id?: string | null;
+  web_search?: boolean;
+  deep_think?: boolean;
+  attachment_ids?: string[];
+  model_name?: string;
+}
+
 export interface ChatRequest {
   query: string;
   session_id?: string;
+  agent_id?: string | null;
+  web_search?: boolean;
+  deep_think?: boolean;
+  attachment_ids?: string[];
+  model_name?: string;
+}
+
+export interface ChatModelsInfo {
+  default: string;
+  models: string[];
 }
 
 export interface ChatResponse {
@@ -106,15 +126,14 @@ export async function chat(req: ChatRequest): Promise<ChatResponse> {
 }
 
 export async function chatStream(
-  query: string,
-  sessionId: string | undefined,
+  req: ChatStreamRequest,
   onEvent: (event: SSEEvent) => void,
 ): Promise<void> {
-  const params = new URLSearchParams({ query });
-  if (sessionId) params.set("session_id", sessionId);
-  const url = `${API_BASE}/chat/stream?${params}`;
-
-  const res = await fetch(url);
+  const res = await fetch(`${API_BASE}/chat/stream`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(req),
+  });
   if (!res.ok) throw new Error(`Stream request failed: ${res.status}`);
 
   const reader = res.body?.getReader();
@@ -143,6 +162,25 @@ export async function chatStream(
       }
     }
   }
+}
+
+export interface AttachmentPreview {
+  filename: string;
+  size: number;
+  chars: number;
+}
+
+export async function uploadChatAttachments(
+  files: File[],
+): Promise<{ attachment_ids: string[]; previews: AttachmentPreview[] }> {
+  const fd = new FormData();
+  files.forEach((f) => fd.append("files", f));
+  const res = await fetch(`${API_BASE}/chat/uploads`, { method: "POST", body: fd });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => res.statusText);
+    throw new Error(`Upload failed: ${res.status} ${detail}`);
+  }
+  return res.json();
 }
 
 export async function indexDocument(
@@ -367,6 +405,10 @@ export async function listAgents(): Promise<AgentInfo[]> {
 
 export async function listAgentModels(): Promise<string[]> {
   return getJSON<string[]>(`${API_BASE}/agents/models`);
+}
+
+export async function listChatModels(): Promise<ChatModelsInfo> {
+  return getJSON<ChatModelsInfo>(`${API_BASE}/chat/models`);
 }
 
 export async function getAgent(id: string): Promise<AgentInfo> {

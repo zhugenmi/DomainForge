@@ -60,10 +60,7 @@ export default function AgentsPage() {
     setError(null);
     try {
       const session = await createSessionWithAgent(agent.id);
-      window.dispatchEvent(
-        new CustomEvent("domainforge:session-active", { detail: session.id }),
-      );
-      router.push("/");
+      router.push(`/?session=${session.id}`);
     } catch {
       setError("创建会话失败");
     }

@@ -10,8 +10,10 @@ from app.runtime.events.event_bus import EventBus
 from app.runtime.nodes.answer_node import AnswerNode
 from app.runtime.nodes.intent_node import IntentNode
 from app.runtime.nodes.memory_node import MemoryNode
+from app.runtime.nodes.reasoning_node import ReasoningNode
 from app.runtime.nodes.retrieval_node import RetrievalNode
 from app.runtime.nodes.tool_node import ToolNode
+from app.runtime.nodes.web_search_node import WebSearchNode
 from app.runtime.planner.planner import PlannerNode
 from app.runtime.reflection.reflection_node import ReflectionNode
 from app.runtime.router.router import Router
@@ -26,7 +28,7 @@ class AgentRuntime:
         memory_manager: MemoryService,
         rag_service: RAGService,
         tool_registry: ToolRegistry,
-        max_iterations: int = 6,
+        max_iterations: int = 8,
     ):
         self.llm = llm
         self.memory_manager = memory_manager
@@ -39,7 +41,9 @@ class AgentRuntime:
         planner_node = PlannerNode(llm=self.llm, event_bus=event_bus)
         memory_node = MemoryNode(memory_manager=self.memory_manager)
         retrieval_node = RetrievalNode(rag_service=self.rag_service, event_bus=event_bus)
+        web_search_node = WebSearchNode(llm=self.llm, tool_registry=self.tool_registry, event_bus=event_bus)
         tool_node = ToolNode(llm=self.llm, tool_registry=self.tool_registry, event_bus=event_bus)
+        reasoning_node = ReasoningNode(llm=self.llm, event_bus=event_bus)
         answer_node = AnswerNode(llm=self.llm, event_bus=event_bus, tool_registry=self.tool_registry)
         reflection_node = ReflectionNode(llm=self.llm, event_bus=event_bus)
         return Router(
@@ -48,7 +52,9 @@ class AgentRuntime:
                 planner_node,
                 memory_node,
                 retrieval_node,
+                web_search_node,
                 tool_node,
+                reasoning_node,
                 answer_node,
                 reflection_node,
             ],

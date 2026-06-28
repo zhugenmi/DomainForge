@@ -67,7 +67,14 @@ async def test_search_tool_returns_list(monkeypatch):
     t = SearchTool()
 
     class _Resp:
-        text = "<html>Result A snippet. Result B longer snippet here.</html>"
+        text = (
+            '<html><body>'
+            '<li class="b_algo"><h2><a href="https://a.com">A</a></h2>'
+            '<p>Result A snippet</p></li>'
+            '<li class="b_algo"><h2><a href="https://b.com">B</a></h2>'
+            '<p>Result B longer snippet here</p></li>'
+            '</body></html>'
+        )
 
         def raise_for_status(self):
             pass
@@ -82,7 +89,7 @@ async def test_search_tool_returns_list(monkeypatch):
         async def __aexit__(self, *a):
             return False
 
-        async def post(self, url, data=None):
+        async def get(self, url, **kw):
             return _Resp()
 
     import app.tools.builtin.search_tool as mod
@@ -90,6 +97,7 @@ async def test_search_tool_returns_list(monkeypatch):
     monkeypatch.setattr(mod.httpx, "AsyncClient", lambda *a, **k: _Client())
     out = await t.execute(query="test", top_k=2)
     assert isinstance(out, list)
+    assert len(out) == 2
     assert all("snippet" in o for o in out)
 
 

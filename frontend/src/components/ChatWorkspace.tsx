@@ -12,7 +12,9 @@ import {
   getSession,
   getSessionMessages,
   listAgents,
+  listChatModels,
   updateSession,
+  uploadChatAttachments,
   type AgentInfo,
   type MessageInfo,
   type SSEEvent,
@@ -28,9 +30,14 @@ import {
   CheckCircle2,
   AlertCircle,
   ListChecks,
+  Paperclip,
+  Globe,
+  Brain,
+  X,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { Logo } from "@/components/Logo";
 
 interface Message {
   id: string;
@@ -97,11 +104,27 @@ export default function ChatWorkspace() {
   const [resetTick, setResetTick] = useState(0);
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [currentAgentId, setCurrentAgentId] = useState<string | null>(null);
+  const [attachments, setAttachments] = useState<File[]>([]);
+  const [webSearch, setWebSearch] = useState(false);
+  const [deepThink, setDeepThink] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [models, setModels] = useState<string[]>([]);
+  const [modelName, setModelName] = useState<string>("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     listAgents().then(setAgents).catch(() => setAgents([]));
+  }, []);
+
+  useEffect(() => {
+    listChatModels()
+      .then((info) => {
+        setModels(info.models);
+        setModelName(info.default || info.models[0] || "");
+      })
+      .catch(() => setModels([]));
   }, []);
 
   const reset = useCallback(() => {
@@ -156,6 +179,17 @@ export default function ChatWorkspace() {
     };
   }, [reset, loadSession]);
 
+  // 跨页跳转携带 ?session= 时加载该会话
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const sid = params.get("session");
+    if (!sid) return;
+    loadSession(sid);
+    const url = new URL(window.location.href);
+    url.searchParams.delete("session");
+    window.history.replaceState({}, "", url);
+  }, [loadSession]);
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, streamAnswer]);
@@ -166,7 +200,7 @@ export default function ChatWorkspace() {
 
   const handleSubmit = async () => {
     const query = input.trim();
-    if (!query || streaming) return;
+    if (!query || streaming || uploading) return;
 
     const userMsg: Message = { id: crypto.randomUUID(), role: "user", content: query };
     setMessages((prev) => [...prev, userMsg]);
@@ -175,36 +209,65 @@ export default function ChatWorkspace() {
     setStreamTags([]);
     setStreamAnswer("");
 
+    let attachmentIds: string[] = [];
+    if (attachments.length > 0) {
+      setUploading(true);
+      try {
+        const resp = await uploadChatAttachments(attachments);
+        attachmentIds = resp.attachment_ids;
+      } catch (err) {
+        setStreamTags((prev) => [
+          ...prev,
+          { id: crypto.randomUUID(), type: "error", data: { message: `附件上传失败：${String(err)}` } },
+        ]);
+        setStreaming(false);
+        setUploading(false);
+        return;
+      }
+      setUploading(false);
+      setAttachments([]);
+    }
+
     let finalAnswer = "";
 
     try {
-      await chatStream(query, sessionId, (event: SSEEvent) => {
-        const tracked = [
-          "intent_detected",
-          "plan_generated",
-          "retrieval_started",
-          "tool_called",
-          "tool_result",
-          "reflection",
-          "error",
-        ];
-        if (tracked.includes(event.event)) {
-          setStreamTags((prev) => [
-            ...prev,
-            { id: crypto.randomUUID(), type: event.event, data: event.data },
-          ]);
-        } else if (event.event === "final_answer" && event.data.answer) {
-          finalAnswer = event.data.answer as string;
-          setStreamAnswer(finalAnswer);
-        }
-        if (event.data.session_id && !sessionId) {
-          const sid = event.data.session_id as string;
-          setSessionId(sid);
-          window.dispatchEvent(
-            new CustomEvent("domainforge:session-active", { detail: sid }),
-          );
-        }
-      });
+      await chatStream(
+        {
+          query,
+          session_id: sessionId,
+          web_search: webSearch,
+          deep_think: deepThink,
+          attachment_ids: attachmentIds,
+          model_name: modelName,
+        },
+        (event: SSEEvent) => {
+          const tracked = [
+            "intent_detected",
+            "plan_generated",
+            "retrieval_started",
+            "tool_called",
+            "tool_result",
+            "reflection",
+            "error",
+          ];
+          if (tracked.includes(event.event)) {
+            setStreamTags((prev) => [
+              ...prev,
+              { id: crypto.randomUUID(), type: event.event, data: event.data },
+            ]);
+          } else if (event.event === "final_answer" && event.data.answer) {
+            finalAnswer = event.data.answer as string;
+            setStreamAnswer(finalAnswer);
+          }
+          if (event.data.session_id && !sessionId) {
+            const sid = event.data.session_id as string;
+            setSessionId(sid);
+            window.dispatchEvent(
+              new CustomEvent("domainforge:session-active", { detail: sid }),
+            );
+          }
+        },
+      );
     } catch (err) {
       setStreamTags((prev) => [
         ...prev,
@@ -268,7 +331,7 @@ export default function ChatWorkspace() {
               }
             }}
           >
-            <option value="">默认（无 agent）</option>
+            <option value="">默认</option>
             {agents.map((a) => (
               <option key={a.id} value={a.id}>
                 {a.name}
@@ -301,34 +364,140 @@ export default function ChatWorkspace() {
       {/* Input */}
       <div className="relative flex-shrink-0 border-t border-border bg-bg-elevated/80 backdrop-blur-md">
         <div className="max-w-7xl mx-auto px-6 py-4">
-          <div className="relative flex items-end gap-2 p-2 card focus-within:border-accent focus-within:shadow-[0_0_0_3px_var(--accent-glow)] transition-all duration-150">
-            <textarea
-              ref={inputRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={onKey}
-              placeholder={streaming ? "Agent 正在处理…" : "输入问题，Enter 发送 · Shift+Enter 换行"}
-              rows={1}
-              disabled={streaming}
-              className="focus-ring flex-1 resize-none bg-transparent text-text placeholder:text-text-faint text-[14px] leading-6 disabled:opacity-50 disabled:cursor-not-allowed py-2 px-1 outline-none"
-              style={{ maxHeight: "120px" }}
+          <div className="relative flex flex-col gap-2 p-2 card transition-colors duration-150">
+            {/* 工具栏 */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={streaming || uploading}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[12px] rounded-md border border-border bg-bg-surface-2 text-text-dim hover:text-text hover:border-border-bright disabled:opacity-50 focus-ring"
+                title="上传附件"
+              >
+                <Paperclip className="w-3.5 h-3.5" strokeWidth={2} />
+                附件
+                {attachments.length > 0 && (
+                  <span className="ml-0.5 text-accent">{attachments.length}</span>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => setWebSearch((v) => !v)}
+                disabled={streaming}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-[12px] rounded-md border focus-ring disabled:opacity-50 ${
+                  webSearch
+                    ? "bg-accent-dim text-accent border-accent/30"
+                    : "bg-bg-surface-2 text-text-dim border-border hover:text-text hover:border-border-bright"
+                }`}
+                title="联网搜索（默认关闭）"
+              >
+                <Globe className="w-3.5 h-3.5" strokeWidth={2} />
+                联网搜索
+              </button>
+              <button
+                type="button"
+                onClick={() => setDeepThink((v) => !v)}
+                disabled={streaming}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-[12px] rounded-md border focus-ring disabled:opacity-50 ${
+                  deepThink
+                    ? "bg-accent-dim text-accent border-accent/30"
+                    : "bg-bg-surface-2 text-text-dim border-border hover:text-text hover:border-border-bright"
+                }`}
+                title="深度思考（默认关闭）"
+              >
+                <Brain className="w-3.5 h-3.5" strokeWidth={2} />
+                深度思考
+              </button>
+            </div>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              className="hidden"
+              onChange={(e) => {
+                const picked = e.target.files ? Array.from(e.target.files) : [];
+                setAttachments((prev) => [...prev, ...picked]);
+                e.target.value = "";
+              }}
             />
-            <button
-              onClick={handleSubmit}
-              disabled={!input.trim() || streaming}
-              aria-label="发送"
-              className="btn-primary focus-ring flex-shrink-0 w-10 h-10 grid place-items-center disabled:hover:shadow-none"
-            >
-              {streaming ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <ArrowUp className="w-4 h-4" strokeWidth={2.5} />
-              )}
-            </button>
+
+            {/* 附件预览 */}
+            {attachments.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {attachments.map((f, i) => (
+                  <span
+                    key={`${f.name}-${i}`}
+                    className="inline-flex items-center gap-1.5 px-2 py-1 text-[11px] rounded border border-border bg-bg-surface-2 text-text-dim"
+                  >
+                    <Paperclip className="w-3 h-3" />
+                    {f.name}
+                    <span className="text-text-faint">{(f.size / 1024).toFixed(1)}KB</span>
+                    <button
+                      type="button"
+                      onClick={() => setAttachments((prev) => prev.filter((_, idx) => idx !== i))}
+                      className="text-text-faint hover:text-danger focus-ring rounded"
+                      aria-label="移除附件"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+
+            <div className="flex items-end gap-2">
+              <textarea
+                ref={inputRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={onKey}
+                placeholder={streaming ? "Agent 正在处理…" : "输入问题，Enter 发送 · Shift+Enter 换行"}
+                rows={3}
+                disabled={streaming || uploading}
+                className="flex-1 resize-none bg-transparent text-text placeholder:text-text-faint text-[14px] leading-6 disabled:opacity-50 disabled:cursor-not-allowed py-2 px-1 outline-none"
+                style={{ minHeight: "96px", maxHeight: "200px" }}
+              />
+              <button
+                onClick={handleSubmit}
+                disabled={!input.trim() || streaming || uploading}
+                aria-label="发送"
+                className="btn-primary focus-ring flex-shrink-0 w-10 h-10 grid place-items-center disabled:hover:shadow-none"
+              >
+                {streaming || uploading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <ArrowUp className="w-4 h-4" strokeWidth={2.5} />
+                )}
+              </button>
+            </div>
           </div>
           <div className="mt-2 flex items-center justify-between text-[11px] text-text-faint">
-            <span>{streaming ? "运行中" : "就绪"}</span>
-            <span>{input.length} 字</span>
+            <div className="flex items-center gap-3">
+              <select
+                value={modelName}
+                onChange={(e) => setModelName(e.target.value)}
+                disabled={streaming}
+                title="选择本轮对话使用的模型"
+                className="rounded-md border border-border bg-bg-surface px-2 py-1 text-[11px] text-text-dim hover:text-text hover:border-border-bright disabled:opacity-50 focus-ring cursor-pointer"
+              >
+                {models.length === 0 && <option value="">默认</option>}
+                {models.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+              <span>
+                {uploading ? "上传附件中…" : streaming ? "运行中" : "就绪"}
+                {webSearch && " · 联网"}
+                {deepThink && " · 深思"}
+              </span>
+            </div>
+            <span>
+              {attachments.length > 0 && `${attachments.length} 附件 · `}
+              {input.length} 字
+            </span>
           </div>
         </div>
       </div>
@@ -339,10 +508,7 @@ export default function ChatWorkspace() {
 function EmptyState() {
   return (
     <div className="flex flex-col items-center justify-center min-h-[60vh] fade-up">
-      <div className="relative w-16 h-16 grid place-items-center mb-6">
-        <div className="absolute inset-0 rounded-2xl bg-accent-dim border border-accent/20" />
-        <Sparkles className="w-7 h-7 text-accent" strokeWidth={1.75} />
-      </div>
+      <Logo size={56} className="mb-5" />
 
       <h1 className="text-[24px] font-semibold text-text mb-2">DomainForge</h1>
       <p className="text-[13px] text-text-muted mb-10">

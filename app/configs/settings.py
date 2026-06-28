@@ -69,6 +69,11 @@ class Settings(BaseSettings):
     MAX_UPLOAD_SIZE_MB: int = 20
     PREVIEW_SESSION_TTL: int = 600
 
+    # Chat input enhancements
+    CHAT_ATTACHMENT_TTL: int = 600       # 聊天附件 store TTL（秒）
+    MAX_CHAT_ATTACHMENTS: int = 5        # 单次聊天附件数上限
+    MAX_CHAT_ATTACHMENT_MB: int = 20     # 单文件大小上限（MB）
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
     @field_validator("CORS_ORIGINS", mode="before")

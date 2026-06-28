@@ -25,3 +25,8 @@ class AgentState:
     # agent 配置注入：system_prompt 非空时覆盖 AnswerNode 默认；domain 非空时过滤检索
     agent_system_prompt: str = ""
     agent_domain: str | None = None
+    # 聊天输入增强：联网搜索开关 / 深度思考开关 / 附件 / 思考链
+    web_search: bool = False
+    deep_think: bool = False
+    attachments: list[dict] = field(default_factory=list)
+    reasoning: str = ""

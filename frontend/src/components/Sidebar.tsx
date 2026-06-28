@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { Logo } from "@/components/Logo";
 import {
   Plus,
   Database,
@@ -116,9 +117,7 @@ export default function Sidebar({
         }`}
       >
         <div className="flex items-center gap-2.5 min-w-0" title="DomainForge">
-          <div className="relative w-7 h-7 flex-shrink-0 grid place-items-center rounded-[8px] bg-accent-dim border border-accent/30">
-            <div className="w-2 h-2 rounded-full bg-accent" />
-          </div>
+          <Logo size={28} className="flex-shrink-0" />
           {!collapsed && (
             <div className="min-w-0 flex flex-col">
               <span className="text-[13px] font-semibold text-text leading-none tracking-tight">

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,12 +21,14 @@ from app.observability.audit.audit_service import AuditService
 from app.observability.logging.logger import get_logger
 from app.observability.tracing.tracer import request_trace
 from app.memory.memory_service import MemoryService
+from app.rag.parser import parse_bytes
 from app.rag.retrieval.vector import VectorRetriever
 from app.rag.service import RAGService
 from app.runtime.runtime import AgentRuntime
 from app.runtime.state.agent_state import AgentState
-from app.schemas.chat import ChatRequest, ChatResponse
+from app.schemas.chat import AttachmentPreview, AttachmentUploadResponse, ChatModelsResponse, ChatRequest, ChatResponse
 from app.security.prompt_guard import check_prompt
+from app.services.attachment_store import attachment_store
 from app.tools.builtin.calculator_tool import CalculatorTool
 from app.tools.builtin.file_tool import FileReadTool, FileWriteTool
 from app.tools.builtin.knowledge_catalog_tool import ListKnowledgeBasesTool
@@ -67,24 +69,21 @@ async def _resolve_agent(
     return agent
 
 
-def _llm_for_agent(agent: Agent | None) -> FallbackPolicy:
-    """按 agent.model_name 构造 LLM；agent 为 None 或构造失败时回退全局 fallback。
-
-    model_name 为空（如 builtin seed）时回退到 settings.DEFAULT_LLM_MODEL。
-    """
+def _llm_for_agent(agent: Agent | None, override_model: str | None = None) -> FallbackPolicy:
+    """按 override_model > agent.model_name > DEFAULT_LLM_MODEL 构造 LLM；构造失败回退全局 fallback。"""
     router = ModelRouter()
-    if agent is None:
+    if agent is None and not override_model:
         return router.get_fallback()
     try:
         provider = router.get_provider()
-        model = agent.model_name or settings.DEFAULT_LLM_MODEL
+        model = override_model or (agent.model_name if agent else None) or settings.DEFAULT_LLM_MODEL
         if model:
             provider.model = model
         secondary_name = settings.FALLBACK_LLM_PROVIDER
         secondary = router.get_provider(secondary_name) if secondary_name else None
         return FallbackPolicy(primary=provider, secondary=secondary)
     except Exception:
-        get_logger("chat.agent").warning("agent_llm_build_failed", agent=str(agent.id))
+        get_logger("chat.agent").warning("agent_llm_build_failed", agent=str(agent.id) if agent else None)
         return router.get_fallback()
 
 
@@ -100,9 +99,10 @@ async def _build_runtime(
     session_id: uuid.UUID,
     user_id: uuid.UUID | None = None,
     agent: Agent | None = None,
+    override_model: str | None = None,
 ) -> AgentRuntime:
     # 主链路接入 FallbackPolicy：主 provider 失败自动切备，无 secondary 时等价单 provider
-    llm = _llm_for_agent(agent)
+    llm = _llm_for_agent(agent, override_model=override_model)
     embedder = EmbeddingService(llm=llm)
     memory_service = MemoryService(
         db=db, llm=llm, session_id=session_id, user_id=user_id or uuid.UUID("00000000-0000-0000-0000-000000000001"), embedder=embedder
@@ -174,9 +174,13 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
     agent = await _resolve_agent(db, request.agent_id, session)
     with request_trace("chat", session_id=str(request.session_id)) as span:
         await audit.log(span.trace_id, "chat_request", {"query": request.query, "session_id": str(request.session_id)})
-        runtime = await _build_runtime(db, request.session_id, user_id=user.id, agent=agent)
+        runtime = await _build_runtime(db, request.session_id, user_id=user.id, agent=agent, override_model=request.model_name)
         state = AgentState(query=request.query)
         _apply_agent_to_state(state, agent)
+        state.web_search = request.web_search
+        state.deep_think = request.deep_think
+        if request.attachment_ids:
+            state.attachments = await attachment_store.pop_many(request.attachment_ids)
         state = await runtime.run(state)
         await audit.log(span.trace_id, "chat_response", {"intent": state.intent, "answer_len": len(state.final_answer)})
 
@@ -226,7 +230,11 @@ async def chat_stream(query: str, session_id: uuid.UUID | None = None, db: Async
             await message_repo.create(session_id=session_id, role="assistant", content=blocked)
             await db.commit()
 
-        return StreamingResponse(_blocked_stream(), media_type="text/event-stream")
+        return StreamingResponse(
+            _blocked_stream(),
+            media_type="text/event-stream",
+            headers={"Deprecation": "true"},
+        )
 
     agent = await _resolve_agent(db, None, session)
     runtime = await _build_runtime(db, session_id, user_id=user.id, agent=agent)
@@ -268,4 +276,124 @@ async def chat_stream(query: str, session_id: uuid.UUID | None = None, db: Async
             except Exception:
                 await db.rollback()
 
+    return StreamingResponse(
+        _stream(),
+        media_type="text/event-stream",
+        headers={"Deprecation": "true"},
+    )
+
+
+@router.post("/stream")
+async def chat_stream_post(request: ChatRequest, db: AsyncSession = Depends(get_db)):
+    """POST 版流式聊天：支持 web_search / deep_think / attachment_ids。
+
+    GET /chat/stream 保留向后兼容但已 deprecated。
+    """
+    blocked = _guard(request.query)
+    user = await _ensure_default_user(db)
+    session_repo = SessionRepo(db)
+    message_repo = MessageRepo(db)
+    audit = AuditService(db)
+
+    if request.session_id is None:
+        session = await session_repo.create(user_id=user.id, title=request.query[:50])
+        request.session_id = session.id
+    else:
+        session = await session_repo.get(request.session_id)
+        if session is None:
+            session = await session_repo.create(user_id=user.id, title=request.query[:50])
+            request.session_id = session.id
+
+    await message_repo.create(session_id=request.session_id, role="user", content=request.query)
+
+    if blocked:
+        async def _blocked_stream():
+            payload = f'{{"event": "error", "data": {{"message": "{blocked}"}}}}'
+            yield f"data: {payload}\n\n"
+            await message_repo.create(session_id=request.session_id, role="assistant", content=blocked)
+            await db.commit()
+
+        return StreamingResponse(_blocked_stream(), media_type="text/event-stream")
+
+    agent = await _resolve_agent(db, request.agent_id, session)
+    runtime = await _build_runtime(db, request.session_id, user_id=user.id, agent=agent, override_model=request.model_name)
+    state = AgentState(query=request.query)
+    _apply_agent_to_state(state, agent)
+    state.web_search = request.web_search
+    state.deep_think = request.deep_think
+    if request.attachment_ids:
+        state.attachments = await attachment_store.pop_many(request.attachment_ids)
+
+    async def _stream():
+        try:
+            with request_trace("chat_stream", session_id=str(request.session_id)) as span:
+                await audit.log(
+                    span.trace_id,
+                    "chat_stream_request",
+                    {
+                        "query": request.query,
+                        "session_id": str(request.session_id),
+                        "web_search": request.web_search,
+                        "deep_think": request.deep_think,
+                        "attachment_count": len(state.attachments),
+                    },
+                )
+                async for chunk in runtime.run_stream(state):
+                    yield chunk
+        except Exception as e:
+            import json as _json
+
+            payload = _json.dumps({"event": "error", "data": {"message": str(e)}}, ensure_ascii=False)
+            yield f"data: {payload}\n\n"
+        finally:
+            answer = state.final_answer or "[生成失败：未获得回复]"
+            await _maybe_cache(request.session_id, request.query, state.intent, answer)
+            await message_repo.create(session_id=request.session_id, role="assistant", content=answer)
+            try:
+                await db.commit()
+            except Exception:
+                await db.rollback()
+
     return StreamingResponse(_stream(), media_type="text/event-stream")
+
+
+@router.get("/models", response_model=ChatModelsResponse)
+async def chat_models():
+    """返回聊天可用模型列表及系统默认模型，供输入框下拉。"""
+    raw = settings.AVAILABLE_MODELS.strip()
+    if raw:
+        models = [m.strip() for m in raw.split(",") if m.strip()]
+    else:
+        models = [settings.DEFAULT_LLM_MODEL] if settings.DEFAULT_LLM_MODEL else []
+    return ChatModelsResponse(default=settings.DEFAULT_LLM_MODEL, models=models)
+
+
+@router.post("/uploads", response_model=AttachmentUploadResponse)
+async def chat_uploads(files: list[UploadFile] = File(...)):
+    """聊天附件预上传：解析文本后存入 attachment_store，返回 attachment_ids。
+
+    附件仅本轮注入，不写入知识库；chat 调用 pop_many 取出后即删。
+    """
+    if len(files) > settings.MAX_CHAT_ATTACHMENTS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"附件数超过上限 {settings.MAX_CHAT_ATTACHMENTS}",
+        )
+    attachment_ids: list[str] = []
+    previews: list[AttachmentPreview] = []
+    for f in files:
+        data = await f.read()
+        if len(data) > settings.MAX_CHAT_ATTACHMENT_MB * 1024 * 1024:
+            raise HTTPException(
+                status_code=400,
+                detail=f"{f.filename} 超过 {settings.MAX_CHAT_ATTACHMENT_MB}MB 上限",
+            )
+        filename = f.filename or "unknown.txt"
+        try:
+            text = parse_bytes(filename, data)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"{filename} 解析失败：{e}")
+        aid = await attachment_store.put(filename, text)
+        attachment_ids.append(str(aid))
+        previews.append(AttachmentPreview(filename=filename, size=len(data), chars=len(text)))
+    return AttachmentUploadResponse(attachment_ids=attachment_ids, previews=previews)

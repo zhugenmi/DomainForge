@@ -315,3 +315,28 @@ async def test_retrieval_forced_when_agent_domain_set():
 
     assert retrieval.started_at is not None, "agent_domain 非空时 retrieval 必须执行"
     assert state.retrieved_docs == [{"done": True}]
+
+
+# ---------- Phase 10: 注册 web_search / reasoning 节点 ----------
+
+@pytest.mark.asyncio
+async def test_runtime_registers_web_search_and_reasoning_nodes():
+    from app.runtime.runtime import AgentRuntime
+
+    class _StubLLM:
+        async def generate(self, messages, **kwargs):
+            return "stub"
+
+    rt = AgentRuntime(
+        llm=_StubLLM(),
+        memory_manager=None,
+        rag_service=None,
+        tool_registry=None,
+    )
+    bus = EventBus()
+    router = rt._build_router(bus)
+    names = [n.__class__.__name__.lower().replace("node", "") for n in router.nodes]
+    assert "websearch" in names
+    assert "reasoning" in names
+    assert names.index("websearch") < names.index("tool")
+    assert names.index("reasoning") < names.index("answer")

@@ -54,6 +54,14 @@ class ConditionalStrategy:
                 i += 1
                 iterations += 1
                 continue
+            if name == "websearch" and not self._will_run(state, "websearch"):
+                i += 1
+                iterations += 1
+                continue
+            if name == "reasoning" and not self._will_run(state, "reasoning"):
+                i += 1
+                iterations += 1
+                continue
 
             state = await self.nodes[name].execute(state)
             reroute = getattr(state, "_reflection_reroute", None)
@@ -77,8 +85,12 @@ class ConditionalStrategy:
                 or _plan_needs(state, "retrieve")
                 or bool(state.agent_domain)
             )
+        if name == "websearch":
+            return state.web_search
         if name == "tool":
             return state.intent == "tool" or _plan_needs(state, "tool")
+        if name == "reasoning":
+            return state.deep_think
         return True
 
     def _next_runnable_index(self, state: AgentState, name: str, start: int) -> int | None:

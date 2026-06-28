@@ -66,8 +66,12 @@ class AnswerNode(BaseNode):
             context_parts.append(f"检索到的知识：\n{docs}")
 
         if state.tool_results:
-            results = "\n".join(f"- {r['tool']}: {r['result']}" for r in state.tool_results)
+            results = "\n".join(self._format_tool_result(r) for r in state.tool_results)
             context_parts.append(f"工具执行结果：\n{results}")
+
+        if state.attachments:
+            atts = "\n\n".join(f"[{a['filename']}]\n{a['content']}" for a in state.attachments)
+            context_parts.append(f"用户上传的附件：\n{atts}")
 
         context = "\n\n".join(context_parts) if context_parts else "无额外上下文"
         base_prompt = (
@@ -78,8 +82,40 @@ class AnswerNode(BaseNode):
         else:
             system_prompt = f"{base_prompt}\n\n参考信息：\n{context}"
 
+        # 联网搜索已执行：明确指示 LLM 基于结果回答，不要输出函数调用标记
+        if any(r.get("tool") == "web_search" for r in state.tool_results):
+            system_prompt += (
+                "\n\n系统已为你执行联网搜索，结果见上方「工具执行结果」。"
+                "请直接基于这些搜索结果回答用户问题。"
+                "不要输出 <function_calls>、<invoke> 等函数调用标记——你无法实际调用工具。"
+                "如搜索结果不足，直接说明并给出基于现有信息的回答。"
+            )
+
+        if state.reasoning:
+            system_prompt += f"\n\n你的思考过程：\n{state.reasoning}\n请基于上述思考给出最终答案。"
+
         messages = [{"role": "system", "content": system_prompt}] + state.messages + [{"role": "user", "content": state.query}]
         answer = await self.llm.generate(messages=messages)
         state.final_answer = answer
         await self.event_bus.publish(SSEEventType.FINAL_ANSWER, {"answer": answer})
         return state
+
+    @staticmethod
+    def _format_tool_result(r: dict) -> str:
+        """格式化单条工具结果为可读文本。"""
+        tool = r.get("tool", "unknown")
+        if "error" in r:
+            return f"- {tool}（查询：{r.get('query', '?')}）失败：{r['error']}"
+        result = r.get("result")
+        if tool == "web_search" and isinstance(result, list):
+            lines = [f"- {tool}（查询：{r.get('query', '?')}），返回 {len(result)} 条："]
+            for item in result:
+                if isinstance(item, dict):
+                    title = item.get("title", "")
+                    snippet = item.get("snippet", "")
+                    url = item.get("url", "")
+                    lines.append(f"  · {title} — {snippet}\n    {url}")
+                else:
+                    lines.append(f"  · {item}")
+            return "\n".join(lines)
+        return f"- {tool}: {result}"
