@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import asdict
+
 from app.llm.base import LLMProvider
 from app.rag.context.builder import build_context
 from app.runtime.events.event_bus import EventBus
@@ -65,7 +67,7 @@ class AnswerNode(BaseNode):
         if state.retrieved_docs:
             ctx = build_context(chunks=state.retrieved_docs)
             context_parts.append(ctx.text)
-            state.citations = [c.__dict__ for c in ctx.citations]
+            state.citations = [asdict(c) for c in ctx.citations]
         else:
             state.citations = []
 
