@@ -80,6 +80,10 @@ class Settings(BaseSettings):
     MAX_CHAT_ATTACHMENTS: int = 5        # 单次聊天附件数上限
     MAX_CHAT_ATTACHMENT_MB: int = 20     # 单文件大小上限（MB）
 
+    # Skills
+    SKILLS_INSTALLED_ROOT: str = "skills/installed"
+    SKILLS_MARKETPLACE_ROOT: str = "skills/marketplace"
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
     @field_validator("CORS_ORIGINS", mode="before")
