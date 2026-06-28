@@ -158,8 +158,14 @@ async def test_rerank_service_fallback_on_api_error(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_rerank_service_simple_when_unavailable():
-    reranker = BGEReranker(api_key="", base_url="")  # unavailable
+async def test_rerank_service_simple_when_unavailable(monkeypatch):
+    from app.configs import settings as settings_mod
+    from app.llm.rerank import bge_reranker
+
+    # BGEReranker 从 settings 读 env；想测"不可用"分支必须把 settings 也清空
+    monkeypatch.setattr(bge_reranker.settings, "RERANK_API_KEY", "")
+    monkeypatch.setattr(bge_reranker.settings, "RERANK_BASE_URL", "")
+    reranker = BGEReranker(api_key="", base_url="")
     svc = RerankService(reranker=reranker)
     assert not reranker.available()
     out = await svc.rerank("合同", ["合同文本", "无关"], top_n=2)

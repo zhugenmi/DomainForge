@@ -143,8 +143,14 @@ class ToolNode(BaseNode):
         return ready, deferred
 
     async def _maybe_finalize(self, state: AgentState, content: str) -> None:
-        """LLM 在 tool 循环中直接给出文本答案（无后续 tool_call）时收尾。"""
+        """LLM 在 tool 循环中直接给出文本答案（无后续 tool_call）时收尾。
+
+        若 state 已有 retrieved_docs（领域 agent 强制检索的场景），不收尾，
+        让 AnswerNode 接手基于 RAG 上下文产出带 [N] 引用的答案。
+        """
         if not content.strip():
+            return
+        if state.retrieved_docs:
             return
         state.final_answer = content
         state.answered_by_tool = True

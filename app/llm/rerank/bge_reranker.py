@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 
 import httpx
 
+from app.configs.settings import settings
 from app.observability.logging.logger import get_logger
 
 logger = get_logger("reranker")
@@ -37,9 +37,9 @@ class BGEReranker:
         model: str | None = None,
         timeout: float = 10.0,
     ):
-        self.api_key = api_key or os.getenv("RERANK_API_KEY", "")
-        self.base_url = base_url or os.getenv("RERANK_BASE_URL", "")
-        self.model = model or os.getenv("RERANK_MODEL", "bge-reranker-base")
+        self.api_key = api_key or settings.RERANK_API_KEY
+        self.base_url = base_url or settings.RERANK_BASE_URL
+        self.model = model or settings.RERANK_MODEL
         self.timeout = timeout
 
     def available(self) -> bool:
