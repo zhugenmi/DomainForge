@@ -4,6 +4,7 @@ from dataclasses import asdict
 
 from app.llm.base import LLMProvider
 from app.rag.context.builder import build_context
+from app.rag.context.citation import reorder_citations
 from app.runtime.events.event_bus import EventBus
 from app.runtime.events.event_type import SSEEventType
 from app.runtime.nodes.base import BaseNode
@@ -109,6 +110,8 @@ class AnswerNode(BaseNode):
 
         messages = [{"role": "system", "content": system_prompt}] + state.messages + [{"role": "user", "content": state.query}]
         answer = await self.llm.generate(messages=messages)
+        # 按 answer 中 [N] 首次出现顺序重编号 citations，过滤未引用项，规整为正序 1,2,3...
+        answer, state.citations = reorder_citations(answer, state.citations)
         state.final_answer = answer
         await self.event_bus.publish(
             SSEEventType.FINAL_ANSWER,
