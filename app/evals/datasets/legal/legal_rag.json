@@ -1,0 +1,20 @@
+[
+  {
+    "id": "legal-rag-001",
+    "query": "民法典中合同订立需要什么条件？",
+    "domain": "legal",
+    "gold_substrings": ["要约与承诺达成合意"]
+  },
+  {
+    "id": "legal-rag-002",
+    "query": "什么是无权代理？",
+    "domain": "legal",
+    "gold_substrings": ["未经被代理人追认的，对被代理人不发生效力"]
+  },
+  {
+    "id": "legal-rag-003",
+    "query": "侵权责任的归责原则有哪些？",
+    "domain": "legal",
+    "gold_substrings": ["过错责任、无过错责任和公平责任"]
+  }
+]

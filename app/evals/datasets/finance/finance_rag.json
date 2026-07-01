@@ -1,0 +1,20 @@
+[
+  {
+    "id": "finance-rag-001",
+    "query": "什么是货币基金？",
+    "domain": "finance",
+    "gold_substrings": ["投资于货币市场短期金融工具"]
+  },
+  {
+    "id": "finance-rag-002",
+    "query": "市盈率(P/E)如何计算？",
+    "domain": "finance",
+    "gold_substrings": ["市盈率 = 股价 / 每股收益"]
+  },
+  {
+    "id": "finance-rag-003",
+    "query": "什么是逆回购？",
+    "domain": "finance",
+    "gold_substrings": ["央行向商业银行买入有价证券"]
+  }
+]
