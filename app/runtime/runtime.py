@@ -81,6 +81,9 @@ class AgentRuntime:
         async def _execute() -> None:
             try:
                 await router.run(state)
+            except asyncio.CancelledError:
+                await event_bus.publish_error("请求超时，请重试")
+                raise
             except Exception as e:
                 await event_bus.publish_error(str(e))
             finally:

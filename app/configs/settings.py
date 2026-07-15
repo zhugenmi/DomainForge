@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     DEFAULT_LLM_MODEL: str = "gpt-4o"
     LLM_API_KEY: str = ""
     LLM_BASE_URL: str = "https://api.openai.com/v1"
+    LLM_TIMEOUT: int = 60  # LLM 请求超时（秒），超时引发 APITimeoutError
     FALLBACK_LLM_PROVIDER: str = ""
     FALLBACK_LLM_MODEL: str = ""
     # 可用模型列表（逗号分隔），供 agent 表单下拉；为空则回退到 [DEFAULT_LLM_MODEL]

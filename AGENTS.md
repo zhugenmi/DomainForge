@@ -15,8 +15,8 @@ make install                           # pip install -e ".[dev]"
 make migrate                           # alembic upgrade head
 make dev                               # uvicorn app.main:app --reload :8000
 
-# One-shot: ./dev.sh starts docker + backend + frontend, Ctrl+C stops all.
-# ./dev.sh -stop / -restart [b|f|all]
+# One-shot: ./domainforge.sh starts docker + backend + frontend, Ctrl+C stops all.
+# ./domainforge.sh stop / restart [b|f|all] / status
 ```
 
 ## Commands

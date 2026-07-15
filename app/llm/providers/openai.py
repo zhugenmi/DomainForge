@@ -19,6 +19,7 @@ class OpenAIProvider(LLMProvider):
         self.client = AsyncOpenAI(
             api_key=api_key or settings.LLM_API_KEY,
             base_url=base_url or settings.LLM_BASE_URL,
+            timeout=settings.LLM_TIMEOUT,
         )
         self.model = model or settings.DEFAULT_LLM_MODEL
 
