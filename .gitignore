@@ -82,9 +82,7 @@ jaeger-data/
 # --- Project: ignore local data ---
 /data/raw_documents/
 /data/uploads/
-docs/
-alembic/
-CLAUDE*
 script.txt
+CLAUDE*
 .claude/
 .superpowers/

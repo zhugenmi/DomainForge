@@ -15,7 +15,7 @@
 - **会话记忆** — 分层记忆管理（短期 / 摘要 / 长期）
 - **结果反思** — 执行结果质量评估与自动纠错重试
 - **流式输出** — SSE 实时推送执行中间状态
-- **自定义智能体** — 用户可创建/编辑/删除智能体，配置名称、简介、说明（system prompt）、模型、温度、绑定知识库；会话绑定 agent 后按其配置注入 prompt/domain/模型。系统默认提供法律咨询 builtin agent（绑定 legal 知识库）。详见 [自定义 Agent 模块文档](docs/agent_module.md)
+- **自定义智能体** — 用户可创建/编辑/删除智能体，配置名称、简介、说明（system prompt）、模型、温度、绑定知识库；会话绑定 agent 后按其配置注入 prompt/domain/模型。系统默认提供法律咨询 builtin agent（绑定 legal 知识库）。详见 [自定义 Agent 模块文档](docs/architecture/06_agents.md)
 
 ### RAG 能力
 
@@ -242,8 +242,7 @@ domainforge/
 │   │   └── 05_observability_evals.md     # 可观测性与评测
 │   └── plan/                             # 实现计划（按模块组织）
 │       ├── design.md                     # 项目原始设计稿（架构源头）
-│       ├── full-implementation.md        # 全量实现计划与进度
-│       └── frontend-redesign.md          # 前端重设计（已废弃，留存作历史）
+│       └── full-implementation.md        # 全量实现计划与进度
 │
 ├── .env.example                          # 环境变量模板
 ├── docker-compose.yml                    # 本地开发环境
